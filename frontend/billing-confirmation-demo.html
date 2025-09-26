@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Demo - Panel de Confirmación de Facturación</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f8fafc;
+            margin: 0;
+            padding: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .demo-container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .demo-title {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+        }
+        
+        .billing-confirmation-card {
+            background-color: #fff8e1;
+            border: 2px solid #f39c12;
+            border-radius: 16px;
+            box-shadow: 0 6px 12px rgba(243, 156, 18, 0.15);
+            padding: 30px;
+            margin-bottom: 30px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .bg-decoration {
+            position: absolute;
+            top: -20px;
+            right: -20px;
+            width: 100px;
+            height: 100px;
+            background: linear-gradient(135deg, rgba(243, 156, 18, 0.1) 0%, rgba(243, 156, 18, 0.05) 100%);
+            border-radius: 50%;
+            z-index: 0;
+        }
+        
+        .card-content {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .card-title {
+            font-size: 1.6rem;
+            color: #d68910;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 700;
+        }
+        
+        .title-icon {
+            background-color: #f39c12;
+            border-radius: 50%;
+            padding: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .card-description {
+            color: #b7950b;
+            margin-bottom: 25px;
+            font-size: 16px;
+            line-height: 1.6;
+            font-weight: 500;
+        }
+        
+        .button-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .confirm-button {
+            padding: 16px 32px;
+            background: linear-gradient(135deg, #27ae60 0%, #2ecc71 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
+            transition: all 0.3s ease;
+            min-width: 180px;
+            justify-content: center;
+        }
+        
+        .confirm-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(46, 204, 113, 0.4);
+        }
+        
+        .reject-button {
+            padding: 16px 32px;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+            transition: all 0.3s ease;
+            min-width: 180px;
+            justify-content: center;
+        }
+        
+        .reject-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(231, 76, 60, 0.4);
+        }
+        
+        .tip-container {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: rgba(243, 156, 18, 0.1);
+            border-radius: 8px;
+            border: 1px solid rgba(243, 156, 18, 0.2);
+        }
+        
+        .tip-text {
+            margin: 0;
+            font-size: 14px;
+            color: #b7950b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .loading-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        .demo-info {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .feature-list li::before {
+            content: "✨";
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <h1 class="demo-title">🎨 Demo: Panel de Confirmación de Facturación</h1>
+        
+        <div class="demo-info">
+            <h3>✨ Características del Diseño:</h3>
+            <ul class="feature-list">
+                <li><strong>Diseño llamativo:</strong> Fondo amarillo dorado que destaca la importancia</li>
+                <li><strong>Iconografía clara:</strong> Íconos intuitivos para cada acción</li>
+                <li><strong>Botones grandes:</strong> Fáciles de clickear con colores distintivos</li>
+                <li><strong>Efectos hover:</strong> Animaciones suaves al pasar el mouse</li>
+                <li><strong>Estados de carga:</strong> Spinners elegantes durante el procesamiento</li>
+                <li><strong>Tip informativo:</strong> Explicación clara de las consecuencias</li>
+                <li><strong>Responsive:</strong> Se adapta a diferentes tamaños de pantalla</li>
+            </ul>
+        </div>
+        
+        <!-- Panel de Confirmación Normal -->
+        <div class="billing-confirmation-card">
+            <div class="bg-decoration"></div>
+            
+            <div class="card-content">
+                <h2 class="card-title">
+                    <div class="title-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+                            <path d="M12 9v4"/>
+                            <path d="M12 17h.01"/>
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                        </svg>
+                    </div>
+                    ⚡ Confirmación de Facturación Requerida
+                </h2>
+                
+                <p class="card-description">
+                    Esta transacción está esperando tu decisión. ¿Deseas generar una factura para esta transacción o marcarla como no facturable?
+                </p>
+                
+                <div class="button-container">
+                    <button class="confirm-button" onclick="showConfirmingState(this)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M20 6L9 17l-5-5"/>
+                        </svg>
+                        ✅ Sí, Facturar
+                    </button>
+                    
+                    <button class="reject-button" onclick="showRejectingState(this)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                        ❌ No Facturar
+                    </button>
+                </div>
+                
+                <div class="tip-container">
+                    <p class="tip-text">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        <strong>Tip:</strong> Si confirmas la facturación, se generará automáticamente la factura en Facturante. Si la rechazas, la transacción se marcará como "No requiere facturación".
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Panel con estado de carga (ejemplo) -->
+        <div class="billing-confirmation-card">
+            <div class="bg-decoration"></div>
+            
+            <div class="card-content">
+                <h2 class="card-title">
+                    <div class="title-icon">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+                            <path d="M12 9v4"/>
+                            <path d="M12 17h.01"/>
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                        </svg>
+                    </div>
+                    ⚡ Confirmación de Facturación Requerida
+                </h2>
+                
+                <p class="card-description">
+                    Esta transacción está esperando tu decisión. ¿Deseas generar una factura para esta transacción o marcarla como no facturable?
+                </p>
+                
+                <div class="button-container">
+                    <button class="confirm-button" style="background: #95a5a6; cursor: not-allowed; box-shadow: none;">
+                        <div class="loading-spinner"></div>
+                        Procesando...
+                    </button>
+                    
+                    <button class="reject-button" style="background: #95a5a6; cursor: not-allowed; box-shadow: none;" disabled>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                        ❌ No Facturar
+                    </button>
+                </div>
+                
+                <div class="tip-container">
+                    <p class="tip-text">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+                        </svg>
+                        <strong>Estado:</strong> Procesando confirmación de facturación... Por favor espere.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function showConfirmingState(button) {
+            button.innerHTML = `
+                <div class="loading-spinner"></div>
+                Procesando...
+            `;
+            button.style.background = '#95a5a6';
+            button.style.cursor = 'not-allowed';
+            button.style.boxShadow = 'none';
+            button.disabled = true;
+            
+            // Simular procesamiento
+            setTimeout(() => {
+                alert('¡Facturación confirmada exitosamente! 🎉');
+                resetButton(button, 'confirm');
+            }, 2000);
+        }
+        
+        function showRejectingState(button) {
+            button.innerHTML = `
+                <div class="loading-spinner"></div>
+                Procesando...
+            `;
+            button.style.background = '#95a5a6';
+            button.style.cursor = 'not-allowed';
+            button.style.boxShadow = 'none';
+            button.disabled = true;
+            
+            // Simular procesamiento
+            setTimeout(() => {
+                alert('Transacción marcada como no facturable ✅');
+                resetButton(button, 'reject');
+            }, 2000);
+        }
+        
+        function resetButton(button, type) {
+            if (type === 'confirm') {
+                button.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M20 6L9 17l-5-5"/>
+                    </svg>
+                    ✅ Sí, Facturar
+                `;
+                button.style.background = 'linear-gradient(135deg, #27ae60 0%, #2ecc71 100%)';
+                button.style.boxShadow = '0 4px 12px rgba(46, 204, 113, 0.3)';
+            } else {
+                button.innerHTML = `
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                    ❌ No Facturar
+                `;
+                button.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100())';
+                button.style.boxShadow = '0 4px 12px rgba(231, 76, 60, 0.3)';
+            }
+            button.style.cursor = 'pointer';
+            button.disabled = false;
+        }
+    </script>
+</body>
+</html>

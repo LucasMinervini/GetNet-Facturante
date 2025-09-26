@@ -1,0 +1,101 @@
+# ==============================================
+# ARCHIVOS SENSIBLES - NO SUBIR A GIT
+# ==============================================
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# Archivos de configuración con credenciales
+application-local.properties
+application-local.yml
+application-production.yml
+application-staging.yml
+
+# ==============================================
+# DEPENDENCIAS Y BUILD
+# ==============================================
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Java/Maven
+target/
+.m2/
+
+# ==============================================
+# IDEs Y EDITORES
+# ==============================================
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Eclipse
+.project
+.classpath
+.settings/
+.metadata/
+
+# Visual Studio Code
+.vscode/
+
+# NetBeans
+nbproject/private/
+build/
+nbbuild/
+dist/
+nbdist/
+.nb-gradle/
+
+# ==============================================
+# SISTEMA OPERATIVO
+# ==============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# ==============================================
+# LOGS Y TEMPORALES
+# ==============================================
+*.log
+logs/
+*.tmp
+*.temp
+*.swp
+*.swo
+
+# ==============================================
+# DOCKER
+# ==============================================
+.dockerignore
+
+# ==============================================
+# ARCHIVOS DE BACKUP
+# ==============================================
+*.backup
+*.bak
+*.old
+
+# ==============================================
+# CERTIFICADOS Y LLAVES
+# ==============================================
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+*.keystore

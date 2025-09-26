@@ -1,0 +1,43 @@
+# ==============================================
+# ARCHIVOS SENSIBLES - NO SUBIR A GIT
+# ==============================================
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# Archivos de configuración con credenciales
+application-local.yml
+application-local.properties
+application-production.yml
+application-production.properties
+application-staging.yml
+application-staging.properties
+
+# ==============================================
+# MAVEN Y BUILD
+# ==============================================
+/target
+/.mvn
+/mvnw
+/mvnw.cmd
+
+# ==============================================
+# IDEs
+# ==============================================
+/.idea
+*.iml
+*.iws
+*.ipr
+/.classpath
+/.project
+/.settings
+
+# ==============================================
+# LOGS Y TEMPORALES
+# ==============================================
+*.log
+logs/
+*.tmp
+*.temp

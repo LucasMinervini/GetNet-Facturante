@@ -1,0 +1,201 @@
+package com.gf.connector.controllers;
+
+import com.gf.connector.domain.Invoice;
+import com.gf.connector.domain.Transaction;
+import com.gf.connector.domain.TransactionStatus;
+import com.gf.connector.repo.InvoiceRepository;
+import com.gf.connector.repo.TransactionRepository;
+import com.gf.connector.service.InvoiceService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
+
+@Slf4j
+@RestController
+@RequestMapping("/api/invoices")
+@RequiredArgsConstructor
+@Tag(name = "Invoices", description = "API para gestión de facturas")
+public class InvoiceController {
+    
+    private final InvoiceService invoiceService;
+    private final TransactionRepository transactionRepository;
+    private final InvoiceRepository invoiceRepository;
+    
+    /**
+     * Crea una factura en Facturante para una transacción específica
+     */
+    @PostMapping("/create/{transactionId}")
+    @Operation(summary = "Crear factura", description = "Crea una factura para una transacción autorizada o pagada")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Factura creada exitosamente"),
+        @ApiResponse(responseCode = "404", description = "Transacción no encontrada"),
+        @ApiResponse(responseCode = "400", description = "Transacción no está en estado válido para facturación")
+    })
+    public ResponseEntity<?> createInvoice(
+            @Parameter(description = "ID de la transacción", required = true) @PathVariable UUID transactionId) {
+        try {
+            log.info("Solicitud para crear factura para transacción: {}", transactionId);
+            
+            // Buscar la transacción
+            Transaction transaction = transactionRepository.findById(transactionId)
+                    .orElseThrow(() -> new RuntimeException("Transacción no encontrada: " + transactionId));
+            
+            // Verificar que la transacción esté en estado válido para facturar
+            if (transaction.getStatus() != TransactionStatus.PAID && transaction.getStatus() != TransactionStatus.AUTHORIZED) {
+                return ResponseEntity.badRequest()
+                        .body("La transacción debe estar en estado 'paid' o 'authorized' para ser facturada");
+            }
+            
+            // Crear la factura
+            Invoice invoice = invoiceService.createFacturaInFacturante(transaction);
+            
+            return ResponseEntity.ok(invoice);
+            
+        } catch (Exception e) {
+            log.error("Error al crear factura", e);
+            return ResponseEntity.internalServerError()
+                    .body("Error al crear factura: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Obtiene el estado de una factura
+     */
+    @GetMapping("/transaction/{transactionId}")
+    @Operation(summary = "Obtener factura por transacción", description = "Obtiene la información de factura asociada a una transacción")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Factura encontrada exitosamente"),
+        @ApiResponse(responseCode = "404", description = "Transacción no encontrada")
+    })
+    public ResponseEntity<?> getInvoiceByTransaction(
+            @Parameter(description = "ID de la transacción", required = true) @PathVariable UUID transactionId) {
+        try {
+            Transaction transaction = transactionRepository.findById(transactionId)
+                    .orElseThrow(() -> new RuntimeException("Transacción no encontrada: " + transactionId));
+            
+            // Aquí podrías buscar la factura asociada a la transacción
+            // Por simplicidad, retornamos la información de la transacción
+            return ResponseEntity.ok(transaction);
+            
+        } catch (Exception e) {
+            log.error("Error al obtener factura", e);
+            return ResponseEntity.internalServerError()
+                    .body("Error al obtener factura: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Reemite una factura existente
+     */
+    @PostMapping("/resend/{transactionId}")
+    @Operation(summary = "Reemitir factura", description = "Reenvía una factura existente por email")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "Factura reenviada exitosamente"),
+        @ApiResponse(responseCode = "404", description = "Transacción no encontrada"),
+        @ApiResponse(responseCode = "400", description = "No hay factura para reenviar")
+    })
+    public ResponseEntity<?> resendInvoice(
+            @Parameter(description = "ID de la transacción", required = true) @PathVariable UUID transactionId) {
+        try {
+            log.info("Solicitud para reemitir factura para transacción: {}", transactionId);
+            
+            Transaction transaction = transactionRepository.findById(transactionId)
+                    .orElseThrow(() -> new RuntimeException("Transacción no encontrada: " + transactionId));
+            
+            // Verificar que la transacción tenga una factura para reenviar
+            if (transaction.getStatus() != TransactionStatus.PAID) {
+                return ResponseEntity.badRequest()
+                        .body("Solo se pueden reenviar facturas de transacciones pagadas");
+            }
+            
+            // Simular reenvío de factura
+            log.info("Reenviando factura para transacción: {} a cliente: {}", 
+                    transaction.getExternalId(), transaction.getCustomerDoc());
+            
+            return ResponseEntity.ok(Map.of(
+                    "message", "Factura reenviada exitosamente",
+                    "transactionId", transactionId,
+                    "customerDoc", transaction.getCustomerDoc(),
+                    "timestamp", java.time.OffsetDateTime.now()
+            ));
+            
+        } catch (Exception e) {
+            log.error("Error al reemitir factura", e);
+            return ResponseEntity.internalServerError()
+                    .body("Error al reemitir factura: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Descarga el PDF de una factura
+     */
+    @GetMapping("/pdf/{transactionId}")
+    @Operation(summary = "Descargar PDF de factura", description = "Descarga el archivo PDF de una factura")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "200", description = "PDF descargado exitosamente"),
+        @ApiResponse(responseCode = "404", description = "Factura no encontrada")
+    })
+    public ResponseEntity<?> downloadInvoicePdf(
+            @Parameter(description = "ID de la transacción", required = true) @PathVariable UUID transactionId) {
+        try {
+            Transaction transaction = transactionRepository.findById(transactionId)
+                    .orElseThrow(() -> new RuntimeException("Transacción no encontrada: " + transactionId));
+            
+            if (transaction.getStatus() != TransactionStatus.PAID) {
+                return ResponseEntity.badRequest()
+                        .body("No hay PDF disponible para esta transacción");
+            }
+            
+            // Buscar la factura asociada a la transacción
+            Optional<Invoice> invoiceOpt = invoiceRepository.findByTransactionId(transactionId);
+            if (invoiceOpt.isEmpty()) {
+                log.warn("No se encontró factura para transacción: {}", transactionId);
+                return ResponseEntity.notFound().build();
+            }
+            
+            Invoice invoice = invoiceOpt.get();
+            log.info("Factura encontrada: ID={}, Status={}, PDF URL={}", 
+                    invoice.getId(), invoice.getStatus(), invoice.getPdfUrl());
+            
+            // Verificar si la factura tiene PDF URL
+            if (invoice.getPdfUrl() == null || invoice.getPdfUrl().isBlank()) {
+                log.warn("Factura {} no tiene PDF URL disponible", invoice.getId());
+                return ResponseEntity.badRequest()
+                        .body("PDF no disponible para esta factura");
+            }
+            
+            // Si tenemos una URL de PDF (provista por Facturante), redirigimos allí
+            if (invoice.getPdfUrl() != null && !invoice.getPdfUrl().isBlank()) {
+                HttpHeaders headers = new HttpHeaders();
+                headers.add(HttpHeaders.LOCATION, invoice.getPdfUrl());
+                return new ResponseEntity<>(headers, HttpStatus.FOUND);
+            }
+            
+            // Fallback: PDF simulado si no hay URL real
+            String pdfContent = "PDF simulado para transacción: " + transaction.getExternalId();
+            
+            return ResponseEntity.ok()
+                    .header("Content-Type", "application/pdf")
+                    .header("Content-Disposition", "attachment; filename=factura-" + transaction.getExternalId() + ".pdf")
+                    .body(pdfContent);
+            
+        } catch (Exception e) {
+            log.error("Error al descargar PDF", e);
+            return ResponseEntity.internalServerError()
+                    .body("Error al descargar PDF: " + e.getMessage());
+        }
+    }
+}

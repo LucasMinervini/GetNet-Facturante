@@ -1,0 +1,54 @@
+spring:
+  profiles:
+    active: local
+  datasource:
+    url: jdbc:postgresql://localhost:5432/getnet_facturante?timezone=UTC&stringtype=unspecified
+    username: gf_user
+    password: 
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      connectionInitSql: SET TIME ZONE 'UTC';
+      connection-timeout: 30000
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  jackson:
+    time-zone: UTC
+  jvm:
+    timezone: UTC
+
+server:
+  port: 1234
+
+app:
+  cors:
+    allowed-origins: http://localhost:5173
+
+logging:
+  level:
+    com.gf: INFO
+    org.springframework.web: DEBUG
+    org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping: TRACE
+
+# Configuración de GetNet - Los valores reales están en application-local.properties
+getnet:
+  api-key: 
+  api-secret: 
+  seller-id: 
+  environment: sandbox # sandbox, pre, production
+  
+  # Credenciales de webhook (opcional)
+  webhook:
+    username: 
+    password: 
+
+# Configuración de Facturante - Los valores reales están en application-local.properties
+facturante:
+  service-url: 
+  empresa: 
+  usuario: 
+  password: 
+  prefijo: 00001
+  tipo-comprobante: FB

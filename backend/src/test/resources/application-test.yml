@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password: 
+    driver-class-name: org.h2.Driver
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+  jackson:
+    time-zone: UTC
+  jvm:
+    timezone: UTC
+
+server:
+  port: 0  # Puerto aleatorio para evitar conflictos
+
+app:
+  cors:
+    allowed-origins: http://localhost:5173
+
+logging:
+  level:
+    com.gf: DEBUG
+    org.springframework.web: DEBUG
+    org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerMapping: TRACE
+
+getnet:
+  webhook:
+    secret: test-secret
+    signature-header: X-Getnet-Signature
+
+facturante:
+  service-url: http://localhost:8081/mock-facturante
+  empresa: TEST_EMPRESA
+  usuario: test_user
+  password: test_pass
+  prefijo: 0001
+  tipo-comprobante: FB
