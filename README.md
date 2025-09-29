@@ -47,20 +47,7 @@ cd getnet-facturante
 cp .env.example .env
 ```
 
-### 2. Configurar variables de entorno
-Editar `.env` con los datos de tu empresa:
-```env
-# Base de datos
-POSTGRES_DB=getnet_facturante
-POSTGRES_USER=gf_user
-POSTGRES_PASSWORD=gf_pass
 
-# Facturante
-FACTURANTE_EMPRESA=tu_empresa
-FACTURANTE_USUARIO=tu_usuario
-FACTURANTE_PASSWORD=tu_password
-FACTURANTE_PREFIJO=0001
-FACTURANTE_TIPO_COMPROBANTE=FB
 ```
 
 ### 3. Levantar servicios
