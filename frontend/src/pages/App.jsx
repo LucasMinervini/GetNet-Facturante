@@ -1,652 +1,92 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import axios from 'axios'
+import React from 'react'
+import useTransactions from '../hooks/useTransactions'
 import TransactionDetail from './TransactionDetail'
 import BillingSettings from './BillingSettings'
 import BillingConfirmationPage from './BillingConfirmationPage'
+import MainHeader from '../components/MainHeader'
+import StatsGrid from '../components/StatsGrid'
+import TransactionFilters from '../components/TransactionFilters'
+import BulkActionsBar from '../components/BulkActionsBar'
+import TransactionsTable from '../components/TransactionsTable'
+import Pagination from '../components/Pagination'
+import PendingBillingView from '../components/PendingBillingView'
+import ResultsInfo from '../components/ResultsInfo'
+import Toast from '../components/Toast'
+import SimpleModal from '../components/SimpleModal'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:1234'
-const USE_MOCKS = String(import.meta.env.VITE_USE_MOCKS || 'false').toLowerCase() === 'true'
-
-// --- Mocks ligeros para avanzar sin backend ---
-let MOCK_TRANSACTIONS = []
-const ensureMockData = () => {
-  if (MOCK_TRANSACTIONS.length > 0) return
-  const statuses = ['AUTHORIZED', 'PAID', 'FAILED', 'REFUNDED']
-  const currencies = ['ARS', 'BRL']
-  const now = Date.now()
-  const total = 137
-  for (let i = 1; i <= total; i++) {
-    const status = statuses[i % statuses.length]
-    const createdAt = new Date(now - i * 3600_000).toISOString()
-    const capturedAt = status === 'PAID' ? new Date(now - i * 3500_000).toISOString() : null
-    const amount = Number(((i * 1234) % 99999) + 100).toFixed(2)
-    const billingStatus = status === 'PAID' ? (i % 4 === 0 ? 'billed' : (i % 5 === 0 ? 'error' : 'pending')) : 'not_applicable'
-    const creditNoteNumber = status === 'REFUNDED' ? `NC-${1000 + i}` : null
-    MOCK_TRANSACTIONS.push({
-      id: String(i),
-      externalId: `EXT-${100000 + i}`,
-      status,
-      amount: Number(amount),
-      currency: currencies[i % currencies.length],
-      createdAt,
-      capturedAt,
-      customerName: `Cliente ${i}`,
-      customerDoc: `DOC${20000000 + i}`,
-      billingStatus,
-      creditNoteNumber
-    })
-  }
-}
-
-const mockDelay = (ms = 300) => new Promise(res => setTimeout(res, ms))
-
-const applyFiltersSortPaginate = (items, params) => {
-  let list = [...items]
-  const status = params.get('status') || ''
-  const billingStatus = params.get('billingStatus') || ''
-  const minAmount = parseFloat(params.get('minAmount'))
-  const maxAmount = parseFloat(params.get('maxAmount'))
-  const search = (params.get('search') || '').toLowerCase()
-  const startDate = params.get('startDate') ? new Date(params.get('startDate')).getTime() : null
-  const endDate = params.get('endDate') ? new Date(params.get('endDate')).getTime() : null
-  const sortBy = params.get('sortBy') || 'createdAt'
-  const sortDir = (params.get('sortDir') || 'desc').toLowerCase()
-
-  if (status) list = list.filter(i => i.status === status)
-  if (billingStatus) list = list.filter(i => (i.billingStatus || ''))
-    .filter(i => String(i.billingStatus || '') === billingStatus)
-  if (!Number.isNaN(minAmount)) list = list.filter(i => Number(i.amount) >= minAmount)
-  if (!Number.isNaN(maxAmount)) list = list.filter(i => Number(i.amount) <= maxAmount)
-  if (search) {
-    list = list.filter(i =>
-      String(i.id).toLowerCase().includes(search) ||
-      String(i.externalId).toLowerCase().includes(search) ||
-      String(i.customerName || '').toLowerCase().includes(search)
-    )
-  }
-  if (startDate) list = list.filter(i => new Date(i.createdAt).getTime() >= startDate)
-  if (endDate) list = list.filter(i => new Date(i.createdAt).getTime() <= endDate)
-
-  list.sort((a, b) => {
-    const av = a[sortBy]
-    const bv = b[sortBy]
-    let cmp = 0
-    if (av == null && bv != null) cmp = -1
-    else if (av != null && bv == null) cmp = 1
-    else if (av < bv) cmp = -1
-    else if (av > bv) cmp = 1
-    return sortDir === 'asc' ? cmp : -cmp
-  })
-
-  const page = parseInt(params.get('page') || '0', 10)
-  const size = parseInt(params.get('size') || '20', 10)
-  const start = page * size
-  const end = start + size
-  const content = list.slice(start, end)
-  const totalElements = list.length
-  const totalPages = Math.max(1, Math.ceil(totalElements / size))
-  return { content, totalElements, totalPages }
-}
-
-const apiGet = async (url) => {
-  if (!USE_MOCKS) return axios.get(url)
-  ensureMockData()
-  await mockDelay()
-  if (url.endsWith('/api/health')) {
-    return { data: { status: 'ok' } }
-  }
-  if (url.includes('/api/transactions/list-native?')) {
-    const qs = url.split('?')[1] || ''
-    const params = new URLSearchParams(qs)
-    const result = applyFiltersSortPaginate(MOCK_TRANSACTIONS, params)
-    return { data: result }
-  }
-  if (url.includes('/api/transactions/pending-billing-confirmation')) {
-    const qs = url.split('?')[1] || ''
-    const params = new URLSearchParams(qs)
-    const base = MOCK_TRANSACTIONS.filter(t => t.status === 'PAID' && (t.billingStatus === 'pending' || !t.billingStatus))
-    const result = applyFiltersSortPaginate(base, params)
-    return { data: result }
-  }
-  // default not found
-  return { data: {} }
-}
-
-const apiPost = async (url) => {
-  if (!USE_MOCKS) return axios.post(url)
-  ensureMockData()
-  await mockDelay()
-  if (url.endsWith('/api/transactions/initialize-billing-status')) {
-    MOCK_TRANSACTIONS = MOCK_TRANSACTIONS.map(t => {
-      if (t.status === 'PAID' && (t.billingStatus === 'not_applicable' || !t.billingStatus)) {
-        return { ...t, billingStatus: 'pending' }
-      }
-      return t
-    })
-    return { data: { ok: true } }
-  }
-  const confirmMatch = url.match(/\/api\/transactions\/(\w+)\/confirm-billing$/)
-  if (confirmMatch) {
-    const id = confirmMatch[1]
-    const idx = MOCK_TRANSACTIONS.findIndex(t => String(t.id) === String(id))
-    if (idx >= 0) {
-      const t = MOCK_TRANSACTIONS[idx]
-      MOCK_TRANSACTIONS[idx] = { ...t, billingStatus: 'billed' }
-    }
-    return { data: { ok: true } }
-  }
-  const refundMatch = url.match(/\/api\/credit-notes\/refund\/(\w+)/)
-  if (refundMatch) {
-    const id = refundMatch[1]
-    const idx = MOCK_TRANSACTIONS.findIndex(t => String(t.id) === String(id))
-    if (idx >= 0) {
-      const t = MOCK_TRANSACTIONS[idx]
-      MOCK_TRANSACTIONS[idx] = { ...t, status: 'REFUNDED', creditNoteNumber: `NC-${1000 + Number(id)}` }
-    }
-    return { data: { ok: true } }
-  }
-  return { data: {} }
-}
-
-const HTTP = USE_MOCKS ? { get: apiGet, post: apiPost } : axios
 
 export default function App() {
-  const [health, setHealth] = useState('ping...')
-  const [transactions, setTransactions] = useState([])
-  const [totalPages, setTotalPages] = useState(0)
-  const [totalElements, setTotalElements] = useState(0)
-  const [currentPage, setCurrentPage] = useState(0)
-  const [pageSize, setPageSize] = useState(20)
-  const [loading, setLoading] = useState(false)
+  const {
+    // state
+    health,
+    transactions,
+    totalPages,
+    totalElements,
+    currentPage,
+    setCurrentPage,
+    pageSize,
+    setPageSize,
+    loading,
+    filters,
+    setFilters,
+    searchInput,
+    setSearchInput,
+    currentView,
+    setCurrentView,
+    selectedTransactionId,
+    setSelectedTransactionId,
+    showBulkActions,
+    setShowBulkActions,
+    selectedTransactions,
+    setSelectedTransactions,
+    bulkProcessing,
+    setBulkProcessing,
+    toastMsg,
+    setToastMsg,
+    showNoPendingModal,
+    setShowNoPendingModal,
+    // pending
+    pendingTransactions,
+    pendingTotalPages,
+    pendingCurrentPage,
+    setPendingCurrentPage,
+    pendingLoading,
+    // values/formatters
+    pageSubtotal,
+    formatCurrency,
+    translateStatus,
+    getRelativeTime,
+    // handlers
+    handleFilterChange,
+    clearFilters,
+    handleTransactionClick,
+    handleOpenSettings,
+    handleBackFromSettings,
+    handleBackToList,
+    goToConfirmationView,
+    handleBillingConfirmation,
+    handleBulkBilling,
+    handleBulkReject,
+    handleDownloadInvoice,
+    handleProcessRefund,
+    handleDownloadCreditNote,
+    // confirmation workflow
+    pendingConfirmationTransaction,
+    currentPendingIndex,
+    allPendingTransactions,
+    handleConfirmationDecision,
+    goToNextPendingTransaction,
+    goToPreviousPendingTransaction,
+    confirmBilling
+  } = useTransactions()
+
   
-  // Estado para transacciones pendientes de confirmación
-  const [pendingTransactions, setPendingTransactions] = useState([])
-  const [pendingTotalPages, setPendingTotalPages] = useState(0)
-  const [pendingCurrentPage, setPendingCurrentPage] = useState(0)
-  const [pendingLoading, setPendingLoading] = useState(false)
+
+
+
+  // La inicialización, fetch y polling ahora viven en useTransactions
+
   
-  // Estado para confirmación simple
-  const [pendingConfirmationTransaction, setPendingConfirmationTransaction] = useState(null)
-  const [selectedTransactionId, setSelectedTransactionId] = useState(null)
-  const [currentView, setCurrentView] = useState('list') // 'list' | 'detail' | 'settings' | 'pending-billing' | 'confirmation'
-  
-  // Estado para navegación entre transacciones pendientes
-  const [allPendingTransactions, setAllPendingTransactions] = useState([])
-  const [currentPendingIndex, setCurrentPendingIndex] = useState(0)
-  
-  // Estado para selección múltiple y facturación masiva
-  const [selectedTransactions, setSelectedTransactions] = useState(new Set())
-  const [showBulkActions, setShowBulkActions] = useState(false)
-  const [bulkProcessing, setBulkProcessing] = useState(false)
-  const [searchInput, setSearchInput] = useState('')
-  const [toastMsg, setToastMsg] = useState('')
-  // dark mode eliminado: la web usa tema oscuro por defecto
-  // Modal para cuando no hay transacciones pendientes de confirmación
-  const [showNoPendingModal, setShowNoPendingModal] = useState(false)
-  
-  // Filtros
-  const [filters, setFilters] = useState({
-    status: '',
-    billingStatus: '',
-    minAmount: '',
-    maxAmount: '',
-    startDate: '',
-    endDate: '',
-    search: '',
-    sortBy: 'createdAt',
-    sortDir: 'desc'
-  })
-
-  useEffect(() => {
-    setSearchInput(filters.search || '')
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Debounce del buscador
-  useEffect(() => {
-    const handle = setTimeout(() => {
-      setFilters(prev => ({ ...prev, search: searchInput }))
-      setCurrentPage(0)
-    }, 400)
-    return () => clearTimeout(handle)
-  }, [searchInput])
-
-  const fetchTransactions = async () => {
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: currentPage.toString(),
-        size: pageSize.toString(),
-        sortBy: filters.sortBy,
-        sortDir: filters.sortDir
-      })
-      
-      // Agregar filtros solo si tienen valor
-      if (filters.status) params.append('status', filters.status)
-      if (filters.billingStatus) params.append('billingStatus', filters.billingStatus)
-      if (filters.minAmount) params.append('minAmount', filters.minAmount)
-      if (filters.maxAmount) params.append('maxAmount', filters.maxAmount)
-      console.log('Filtros completos:', filters)
-      
-      if (filters.startDate) {
-        // Convertir datetime-local a ISO 8601 con zona horaria
-        const startDate = new Date(filters.startDate)
-        // Ajustar al inicio del día (00:00:00)
-        startDate.setHours(0, 0, 0, 0)
-        console.log('StartDate original:', filters.startDate)
-        console.log('StartDate convertida (inicio del día):', startDate.toISOString())
-        params.append('startDate', startDate.toISOString())
-      }
-      if (filters.endDate) {
-        // Convertir datetime-local a ISO 8601 con zona horaria
-        const endDate = new Date(filters.endDate)
-        // Ajustar al fin del día (23:59:59.999)
-        endDate.setHours(23, 59, 59, 999)
-        console.log('EndDate original:', filters.endDate)
-        console.log('EndDate convertida (fin del día):', endDate.toISOString())
-        params.append('endDate', endDate.toISOString())
-      } else {
-        console.log('EndDate está vacío o no definido')
-      }
-      if (filters.search) params.append('search', filters.search)
-      
-      const url = `${API}/api/transactions/list-native?${params}`
-      console.log('URL de la petición:', url)
-      
-      const response = await HTTP.get(url)
-      const data = response.data
-      
-      console.log('Respuesta del backend:', data)
-      
-      setTransactions(data.content || [])
-      setTotalPages(data.totalPages || 0)
-      setTotalElements(data.totalElements || 0)
-    } catch (error) {
-      console.error('Error fetching transactions:', error)
-      setTransactions([])
-    } finally {
-      setLoading(false)
-    }
-  }
-
-
-
-  useEffect(() => {
-    HTTP.get(`${API}/api/health`).then(r => setHealth(r.data.status)).catch(() => setHealth('down'))
-    // Inicializar estados de facturación automáticamente al cargar la app
-    initializeBillingStatusSilently()
-  }, [])
-
-  useEffect(() => {
-    fetchTransactions()
-  }, [currentPage, pageSize, filters])
-
-  useEffect(() => {
-    if (currentView === 'pending-billing') {
-      fetchPendingTransactions()
-    }
-  }, [currentView, pendingCurrentPage])
-
-  // Verificar transacciones pendientes cada 10 segundos
-  useEffect(() => {
-    const interval = setInterval(() => {
-      checkForPendingTransactions()
-    }, 10000) // Verificar cada 10 segundos
-
-    // Verificar inmediatamente al cargar
-    checkForPendingTransactions()
-
-    return () => clearInterval(interval)
-  }, [currentView, pendingConfirmationTransaction])
-
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }))
-    setCurrentPage(0) // Reset to first page when filtering
-  }
-
-  const handleSearch = () => {
-    setFilters(prev => ({ ...prev, search: searchInput }))
-    setCurrentPage(0)
-  }
-
-  const clearFilters = () => {
-    setFilters({
-      status: '',
-      billingStatus: '',
-      minAmount: '',
-      maxAmount: '',
-      startDate: '',
-      endDate: '',
-      search: '',
-      sortBy: 'createdAt',
-      sortDir: 'desc'
-    })
-    setSearchInput('')
-    setCurrentPage(0)
-  }
-
-  const handleTransactionClick = (transactionId) => {
-    setSelectedTransactionId(transactionId)
-    setCurrentView('detail')
-  }
-
-  // Funciones para transacciones pendientes de confirmación
-  const fetchPendingTransactions = async () => {
-    setPendingLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: pendingCurrentPage.toString(),
-        size: pageSize.toString()
-      })
-      
-      const response = await HTTP.get(`${API}/api/transactions/pending-billing-confirmation?${params}`)
-      const data = response.data
-      
-      setPendingTransactions(data.content || [])
-      setPendingTotalPages(data.totalPages || 0)
-      if ((data.content || []).length === 0) {
-        setShowNoPendingModal(true)
-      }
-    } catch (error) {
-      console.error('Error fetching pending transactions:', error)
-      setPendingTransactions([])
-    } finally {
-      setPendingLoading(false)
-    }
-  }
-
-  const confirmBilling = async (transactionId) => {
-    try {
-      await HTTP.post(`${API}/api/transactions/${transactionId}/confirm-billing`)
-      setToastMsg('Facturación confirmada exitosamente')
-      setTimeout(() => setToastMsg(''), 3000)
-      fetchPendingTransactions() // Refrescar la lista de pendientes
-      fetchTransactions() // Refrescar la lista principal
-    } catch (error) {
-      console.error('Error confirming billing:', error)
-      setToastMsg('Error al confirmar facturación')
-      setTimeout(() => setToastMsg(''), 3000)
-    }
-  }
-
-
-  // Función simple para verificar si hay transacciones pendientes (solo informativo)
-  const checkForPendingTransactions = async () => {
-    try {
-      const response = await HTTP.get(`${API}/api/transactions/pending-billing-confirmation?page=0&size=1`)
-      const pendingTransactions = response.data.content || []
-      
-      // Ya no navegamos automáticamente - solo guardamos la información
-      if (pendingTransactions.length > 0) {
-        console.log('Hay transacciones pendientes de confirmación disponibles')
-      }
-    } catch (error) {
-      console.error('Error checking for pending transactions:', error)
-    }
-  }
-
-  // Función para ir manualmente a la ventana de confirmación
-  const goToConfirmationView = async () => {
-    try {
-      const response = await HTTP.get(`${API}/api/transactions/pending-billing-confirmation?page=0&size=50`)
-      const pendingTransactions = response.data.content || []
-      
-      if (pendingTransactions.length > 0) {
-        setAllPendingTransactions(pendingTransactions)
-        setCurrentPendingIndex(0)
-        setPendingConfirmationTransaction(pendingTransactions[0])
-        setCurrentView('confirmation')
-      } else {
-        setShowNoPendingModal(true)
-      }
-    } catch (error) {
-      console.error('Error fetching pending transactions:', error)
-      setToastMsg('Error al buscar transacciones pendientes')
-      setTimeout(() => setToastMsg(''), 3000)
-    }
-  }
-
-  const handleConfirmationDecision = (decision, message) => {
-    console.log('Decision received:', decision, message)
-    
-    // Mostrar mensaje de éxito/error
-    setToastMsg(message)
-    setTimeout(() => setToastMsg(''), 4000)
-    
-    // Remover la transacción procesada de la lista
-    const updatedPendingTransactions = allPendingTransactions.filter(t => t.id !== pendingConfirmationTransaction.id)
-    setAllPendingTransactions(updatedPendingTransactions)
-    
-    // Si hay más transacciones pendientes, mostrar la siguiente
-    if (updatedPendingTransactions.length > 0) {
-      const nextIndex = Math.min(currentPendingIndex, updatedPendingTransactions.length - 1)
-      setCurrentPendingIndex(nextIndex)
-      setPendingConfirmationTransaction(updatedPendingTransactions[nextIndex])
-    } else {
-      // No hay más transacciones, volver a la lista principal
-      setPendingConfirmationTransaction(null)
-      setCurrentView('list')
-      setShowNoPendingModal(true)
-    }
-    
-    // Refrescar las listas inmediatamente
-    fetchTransactions()
-  }
-
-  // Función para navegar a la siguiente transacción pendiente
-  const goToNextPendingTransaction = () => {
-    if (currentPendingIndex < allPendingTransactions.length - 1) {
-      const nextIndex = currentPendingIndex + 1
-      setCurrentPendingIndex(nextIndex)
-      setPendingConfirmationTransaction(allPendingTransactions[nextIndex])
-    }
-  }
-
-  // Función para navegar a la transacción pendiente anterior
-  const goToPreviousPendingTransaction = () => {
-    if (currentPendingIndex > 0) {
-      const prevIndex = currentPendingIndex - 1
-      setCurrentPendingIndex(prevIndex)
-      setPendingConfirmationTransaction(allPendingTransactions[prevIndex])
-    }
-  }
-
-  // Función para manejar confirmación desde la tabla
-  const handleBillingConfirmation = async (transactionId, e) => {
-    e.stopPropagation()
-    
-    try {
-      await HTTP.post(`${API}/api/transactions/${transactionId}/confirm-billing`)
-      setToastMsg('✅ Facturación confirmada exitosamente')
-      
-      setTimeout(() => setToastMsg(''), 3000)
-      
-      // Refrescar ambas listas inmediatamente para mostrar el cambio
-      fetchTransactions()
-      fetchPendingTransactions()
-      
-    } catch (error) {
-      console.error('Error al procesar confirmación:', error)
-      setToastMsg('❌ Error al procesar confirmación: ' + (error.response?.data?.message || error.message))
-      setTimeout(() => setToastMsg(''), 3000)
-    }
-  }
-
-  // Funciones para selección múltiple
-  const handleTransactionSelect = (transactionId, isSelected) => {
-    const newSelected = new Set(selectedTransactions)
-    if (isSelected) {
-      newSelected.add(transactionId)
-    } else {
-      newSelected.delete(transactionId)
-    }
-    setSelectedTransactions(newSelected)
-    setShowBulkActions(newSelected.size > 0)
-  }
-
-  const handleSelectAll = (isSelected) => {
-    if (isSelected) {
-      // Seleccionar solo transacciones pendientes
-      const pendingTransactionIds = transactions
-        .filter(t => t.billingStatus === 'pending')
-        .map(t => t.id)
-      setSelectedTransactions(new Set(pendingTransactionIds))
-      setShowBulkActions(pendingTransactionIds.length > 0)
-    } else {
-      setSelectedTransactions(new Set())
-      setShowBulkActions(false)
-    }
-  }
-
-  const handleBulkBilling = async () => {
-    if (selectedTransactions.size === 0) return
-
-    const confirmed = window.confirm(
-      `¿Confirmar facturación de ${selectedTransactions.size} transacciones seleccionadas?\n\n` +
-      `Esto generará ${selectedTransactions.size} facturas automáticamente.`
-    )
-    
-    if (!confirmed) return
-
-    setBulkProcessing(true)
-    let successCount = 0
-    let errorCount = 0
-
-    try {
-      // Procesar cada transacción seleccionada
-      for (const transactionId of selectedTransactions) {
-        try {
-          await HTTP.post(`${API}/api/transactions/${transactionId}/confirm-billing`)
-          successCount++
-        } catch (error) {
-          console.error(`Error facturando transacción ${transactionId}:`, error)
-          errorCount++
-        }
-      }
-
-      // Mostrar resultado
-      if (errorCount === 0) {
-        setToastMsg(`🎉 ¡${successCount} facturas generadas exitosamente!`)
-      } else {
-        setToastMsg(`⚠️ ${successCount} exitosas, ${errorCount} con errores`)
-      }
-
-      // Limpiar selección y refrescar
-      setSelectedTransactions(new Set())
-      setShowBulkActions(false)
-      fetchTransactions()
-      fetchPendingTransactions()
-
-    } catch (error) {
-      setToastMsg('❌ Error en facturación masiva: ' + error.message)
-    } finally {
-      setBulkProcessing(false)
-      setTimeout(() => setToastMsg(''), 5000)
-    }
-  }
-
-
-  // Función para inicializar estados de facturación automáticamente
-  const initializeBillingStatusSilently = async () => {
-    try {
-      await HTTP.post(`${API}/api/transactions/initialize-billing-status`)
-      console.log('Estados de facturación inicializados automáticamente')
-    } catch (error) {
-      console.warn('Error inicializando estados automáticamente:', error)
-    }
-  }
-
-
-  const handleBackToList = () => {
-    setCurrentView('list')
-    setSelectedTransactionId(null)
-  }
-
-  const handleOpenSettings = () => {
-    setCurrentView('settings')
-  }
-
-  const handleBackFromSettings = () => {
-    setCurrentView('list')
-  }
-
-
-
-  const getRelativeTime = (dateString) => {
-    if (!dateString) return ''
-    const rtf = new Intl.RelativeTimeFormat('es-AR', { numeric: 'auto' })
-    const now = new Date()
-    const date = new Date(dateString)
-    const diffMs = date.getTime() - now.getTime()
-    const minutes = Math.round(diffMs / 60000)
-    const hours = Math.round(minutes / 60)
-    const days = Math.round(hours / 24)
-    if (Math.abs(minutes) < 60) return rtf.format(minutes, 'minute')
-    if (Math.abs(hours) < 24) return rtf.format(hours, 'hour')
-    return rtf.format(days, 'day')
-  }
-
-  const pageSubtotal = useMemo(() => {
-    if (!Array.isArray(transactions)) return 0
-    return transactions.reduce((sum, t) => sum + Number(t.amount || 0), 0)
-  }, [transactions])
-
-  const formatCurrency = (value, currency) => {
-    try {
-      const formatted = new Intl.NumberFormat('es-AR', { 
-        style: 'currency', 
-        currency: currency || 'ARS', 
-        minimumFractionDigits: 2 
-      }).format(Number(value))
-      
-      // Quitar el prefijo "BRL" si aparece
-      return formatted.replace(/^BRL\s*/, 'R$ ')
-    } catch (e) {
-      return `$${Number(value || 0).toFixed(2)}`
-    }
-  }
-
-  const translateStatus = (status) => {
-    const statusMap = {
-      'AUTHORIZED': 'Autorizada',
-      'PAID': 'Pagado',
-      'REFUNDED': 'Reembolsado',
-      'FAILED': 'Falló'
-    }
-    return statusMap[status] || status
-  }
-
-  const handleDownloadInvoice = (transactionId, e) => {
-    e.stopPropagation()
-    window.open(`${API}/api/invoices/pdf/${transactionId}`, '_blank')
-  }
-
-  const handleProcessRefund = async (transactionId, e) => {
-    e.stopPropagation()
-    
-    const refundReason = prompt('Ingrese el motivo del reembolso:', 'Reembolso solicitado por el cliente')
-    if (!refundReason) return
-    
-    try {
-      const response = await HTTP.post(`${API}/api/credit-notes/refund/${transactionId}?refundReason=${encodeURIComponent(refundReason)}`)
-      
-      if (response.status === 200) {
-        setToastMsg('Reembolso procesado exitosamente')
-        setTimeout(() => setToastMsg(''), 2000)
-        // Recargar transacciones para mostrar el cambio
-        fetchTransactions()
-      }
-    } catch (error) {
-      console.error('Error al procesar reembolso:', error)
-      setToastMsg('Error al procesar reembolso: ' + (error.response?.data?.message || error.message))
-      setTimeout(() => setToastMsg(''), 3000)
-    }
-  }
-
-  const handleDownloadCreditNote = (transactionId, e) => {
-    e.stopPropagation()
-    window.open(`${API}/api/credit-notes/pdf/${transactionId}`, '_blank')
-  }
 
   // Renderizar vista de detalle si está seleccionada
   if (currentView === 'detail' && selectedTransactionId) {
@@ -687,211 +127,19 @@ export default function App() {
   // Renderizar vista de transacciones pendientes de confirmación
   if (currentView === 'pending-billing') {
     return (
-      <div style={{ padding: '2rem', minHeight: '100vh' }}>
-        {/* Header */}
-        <div className="header">
-          {/* Capa de íconos animados */}
-          <div className="header-icons-layer" aria-hidden="true">
-            <div className="icon-swarm">
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-          </div>
-          <div className="header-buttons">
-            <button
-              onClick={() => setCurrentView('list')}
-              className="btn btn-secondary"
-              style={{ padding: '0.5rem 1rem' }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M19 12H5M12 19l-7-7 7-7"/>
-              </svg>
-              Volver a Lista Principal
-            </button>
-          </div>
-          <div className="header-content">
-            <div className="header-title">
-              <h1>
-                <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                  <polyline points="14,2 14,8 20,8"/>
-                  <line x1="16" y1="13" x2="8" y2="13"/>
-                  <line x1="16" y1="17" x2="8" y2="17"/>
-                  <polyline points="10,9 9,9 8,9"/>
-                </svg>
-                Confirmación de Facturación
-              </h1>
-              <h2>Transacciones Pendientes</h2>
-            </div>
-          </div>
-        </div>
-
-        {/* Toast notification */}
-        {toastMsg && (
-          <div className="toast-notification">
-            {toastMsg}
-          </div>
-        )}
-
-        {/* Contenido principal */}
-        <div className="main-content">
-          {pendingLoading ? (
-            <div className="loading-container">
-              <div className="loading-spinner"></div>
-              <p>Cargando transacciones pendientes...</p>
-            </div>
-          ) : pendingTransactions.length === 0 ? (
-            <div className="empty-state">
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M9 12l2 2 4-4"/>
-                <path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c1.66 0 3.22.45 4.56 1.23"/>
-              </svg>
-              <h3>¡Excelente!</h3>
-              <p>No hay transacciones pendientes de confirmación de facturación.</p>
-            </div>
-          ) : (
-            <>
-              <div className="table-container">
-                <table className="transactions-table">
-                  <thead>
-                    <tr>
-                      <th>ID Externo</th>
-                      <th>Monto</th>
-                      <th>Cliente</th>
-                      <th>Fecha</th>
-                      <th>Estado</th>
-                      <th>Estado Facturación</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pendingTransactions.map((transaction) => (
-                      <tr key={transaction.id}>
-                        <td>
-                          <span className="transaction-id">{transaction.externalId}</span>
-                        </td>
-                        <td>
-                          <span className="amount">{formatCurrency(transaction.amount)}</span>
-                        </td>
-                        <td>
-                          <div className="customer-info">
-                            <span className="customer-name">{transaction.customerName || 'N/A'}</span>
-                            <span className="customer-doc">{transaction.customerDoc || 'N/A'}</span>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="date">{new Date(transaction.createdAt).toLocaleDateString('es-AR')}</span>
-                        </td>
-                        <td>
-                          <span className="status-badge status-pending-billing">
-                            Pendiente Confirmación
-                          </span>
-                        </td>
-                        <td>
-                          <div className="action-buttons">
-                            <button
-                              onClick={() => confirmBilling(transaction.id)}
-                              className="btn btn-success btn-sm"
-                              title="Confirmar facturación"
-                            >
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                <path d="M20 6L9 17l-5-5"/>
-                              </svg>
-                              Facturar
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Paginación */}
-              {pendingTotalPages > 1 && (
-                <div className="pagination">
-                  <button
-                    onClick={() => setPendingCurrentPage(Math.max(0, pendingCurrentPage - 1))}
-                    disabled={pendingCurrentPage === 0}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    ← Anterior
-                  </button>
-                  <span className="page-info">
-                    Página {pendingCurrentPage + 1} de {pendingTotalPages}
-                  </span>
-                  <button
-                    onClick={() => setPendingCurrentPage(Math.min(pendingTotalPages - 1, pendingCurrentPage + 1))}
-                    disabled={pendingCurrentPage >= pendingTotalPages - 1}
-                    className="btn btn-secondary btn-sm"
-                  >
-                    Siguiente →
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {showNoPendingModal && (
-          <div style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.45)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999
-          }}>
-            <div style={{
-              background: 'white',
-              color: '#111',
-              borderRadius: '16px',
-              padding: '24px',
-              width: 'min(90vw, 420px)',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-              textAlign: 'center'
-            }}>
-              <div style={{
-                marginBottom: '12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-                fontWeight: 800,
-                fontSize: '1.1rem'
-              }}>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <path d="M9 12l2 2 4-4"/>
-                </svg>
-                <strong style={{ color: '#111' }}>No hay transacciones pendientes</strong>
-              </div>
-              <div style={{ color: '#4b5563', marginBottom: '18px' }}>
-                Ya no quedan facturas para confirmar.
-              </div>
-              <button
-                onClick={() => setShowNoPendingModal(false)}
-                style={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '10px 16px',
-                  cursor: 'pointer',
-                  fontWeight: 700
-                }}
-              >
-                Entendido
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      <PendingBillingView
+        toastMsg={toastMsg}
+        pendingLoading={pendingLoading}
+        pendingTransactions={pendingTransactions}
+        formatCurrency={formatCurrency}
+        confirmBilling={confirmBilling}
+        pendingTotalPages={pendingTotalPages}
+        pendingCurrentPage={pendingCurrentPage}
+        setPendingCurrentPage={setPendingCurrentPage}
+        showNoPendingModal={showNoPendingModal}
+        setCurrentView={setCurrentView}
+        setShowNoPendingModal={setShowNoPendingModal}
+      />
     )
   }
 
@@ -1211,19 +459,7 @@ export default function App() {
       </div>
       
       {/* Información de resultados */}
-      <div style={{
-        marginBottom: '1rem',
-        color: 'var(--text-secondary)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        fontSize: '0.875rem'
-      }}>
-        <span>
-          Mostrando {transactions.length} de {totalElements} transacciones
-          {loading && ' (Cargando...)'}
-        </span>
-      </div>
+      <ResultsInfo count={transactions.length} total={totalElements} loading={loading} />
 
       {/* Barra de acciones masivas */}
       {showBulkActions && (
@@ -1500,7 +736,7 @@ export default function App() {
                         Reembolsado
                       </span>
                       <button
-                        onClick={(e) => handleDownloadCreditNote(t.id, e)}
+                        onClick={(e) => handleDownloadCreditNote(t, e)}
                         title="Descargar nota de crédito PDF"
                         style={{
                           background: 'linear-gradient(135deg, #27ae60 0%, #2ecc71 100%)',
@@ -1554,7 +790,7 @@ export default function App() {
                       </span>
                       <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', justifyContent: 'center' }}>
                         <button
-                          onClick={(e) => handleDownloadInvoice(t.id, e)}
+                          onClick={(e) => handleDownloadInvoice(t, e)}
                           title="Descargar factura PDF"
                           style={{
                             background: 'linear-gradient(135deg, #3498db 0%, #2980b9 100%)',
@@ -1744,62 +980,15 @@ export default function App() {
         </tbody>
       </table>
       </div>
-      {toastMsg && <div className="toast">{toastMsg}</div>}
+      <Toast message={toastMsg} />
 
-      {showNoPendingModal && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          background: 'rgba(0,0,0,0.45)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 9999
-        }}>
-          <div style={{
-            background: 'white',
-            color: '#111',
-            borderRadius: '16px',
-            padding: '24px',
-            width: 'min(90vw, 420px)',
-            boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
-            textAlign: 'center'
-          }}>
-            <div style={{
-              marginBottom: '12px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              fontWeight: 800,
-              fontSize: '1.1rem'
-            }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#111" strokeWidth="2.2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M9 12l2 2 4-4"/>
-              </svg>
-              <strong style={{ color: '#111' }}>No hay transacciones pendientes</strong>
-            </div>
-            <div style={{ color: '#4b5563', marginBottom: '18px' }}>
-              Ya no quedan facturas para confirmar.
-            </div>
-            <button
-              onClick={() => setShowNoPendingModal(false)}
-              style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '10px',
-                padding: '10px 16px',
-                cursor: 'pointer',
-                fontWeight: 700
-              }}
-            >
-              Entendido
-            </button>
-          </div>
-        </div>
-      )}
+      <SimpleModal
+        open={showNoPendingModal}
+        title="No hay transacciones pendientes"
+        onClose={() => setShowNoPendingModal(false)}
+      >
+        Ya no quedan facturas para confirmar.
+      </SimpleModal>
       
       {/* Paginación */}
       {totalPages > 1 && (

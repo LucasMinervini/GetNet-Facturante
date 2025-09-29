@@ -24,6 +24,8 @@ public record TransactionDto(
     String creditNoteStatus,
     String creditNoteStrategy,
     String billingStatus,
+    String invoicePdfUrl,
+    String creditNotePdfUrl,
     LocalDateTime createdAt,
     LocalDateTime updatedAt
 ) {
@@ -47,6 +49,8 @@ public record TransactionDto(
             transaction.getCreditNoteStatus(),
             transaction.getCreditNoteStrategy(),
             transaction.getBillingStatus(),
+            transaction.getInvoicePdfUrl(),
+            transaction.getCreditNotePdfUrl(),
             transaction.getCreatedAt() != null ? transaction.getCreatedAt().toLocalDateTime() : null,
             transaction.getUpdatedAt() != null ? transaction.getUpdatedAt().toLocalDateTime() : null
         );

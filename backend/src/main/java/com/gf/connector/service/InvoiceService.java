@@ -7,6 +7,7 @@ import com.gf.connector.facturante.model.CrearComprobanteRequest;
 import com.gf.connector.facturante.model.CrearComprobanteResponse;
 import com.gf.connector.facturante.service.FacturanteService;
 import com.gf.connector.repo.InvoiceRepository;
+import com.gf.connector.repo.TransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,7 @@ import java.util.Map;
 public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
+    private final TransactionRepository transactionRepository;
     private final FacturanteService facturanteService;
     private final ObjectMapper objectMapper;
     private final BillingValidationService validationService;
@@ -86,6 +88,9 @@ public class InvoiceService {
                 // Actualizar transaction con datos de factura
                 transaction.setCae(response.getCae());
                 transaction.setInvoiceNumber(response.getNumeroComprobante());
+                // Guardar también la URL directa del PDF en la transacción para que el frontend pueda abrir Facturante
+                transaction.setInvoicePdfUrl(response.getPdfUrl());
+                transactionRepository.save(transaction);
                 
                 log.info("Factura creada exitosamente: CAE={}, Número={}, PDF={}", 
                         response.getCae(), response.getNumeroComprobante(), response.getPdfUrl());

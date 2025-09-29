@@ -124,6 +124,9 @@ public class CreditNoteService {
                 creditNote.setCreditNoteNumber(response.getNumeroComprobante());
                 creditNote.setCreditNoteCae(response.getCae());
                 creditNote.setPdfUrl(response.getPdfUrl());
+                // Persistir URL de PDF también en la transacción para acceso directo desde el frontend
+                transaction.setCreditNotePdfUrl(response.getPdfUrl());
+                transactionRepository.save(transaction);
                 log.info("Nota de crédito creada exitosamente: Número={}, CAE={}", 
                         response.getNumeroComprobante(), response.getCae());
             } else {

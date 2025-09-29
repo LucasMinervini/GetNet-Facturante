@@ -56,6 +56,13 @@ public class Transaction {
     @Column(name = "billing_status")
     @Builder.Default
     private String billingStatus = "pending"; // pending|billed
+    
+    // URLs de PDF
+    @Column(name = "invoice_pdf_url")
+    private String invoicePdfUrl; // URL del PDF de la factura
+    
+    @Column(name = "credit_note_pdf_url")
+    private String creditNotePdfUrl; // URL del PDF de la nota de crédito
 
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;
