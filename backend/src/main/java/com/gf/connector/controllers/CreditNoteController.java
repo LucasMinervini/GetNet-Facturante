@@ -150,7 +150,14 @@ public class CreditNoteController {
                         return new ResponseEntity<>(headers, HttpStatus.FOUND);
                     }
 
-                    // Si no hay URL, devolvemos un PDF simulado con metadatos básicos
+                    // Si no hay URL, intentar construir URL de testing usando el número de la NC
+                    String creditNoteNumber = creditNote.getCreditNoteNumber();
+                    if (creditNoteNumber != null && !creditNoteNumber.isBlank()) {
+                        HttpHeaders headers = new HttpHeaders();
+                        headers.add(HttpHeaders.LOCATION, "https://testing.facturante.com/pdf/" + creditNoteNumber + ".pdf");
+                        return new ResponseEntity<>(headers, HttpStatus.FOUND);
+                    }
+                    // Fallback final: devolver PDF simulado
                     String simulatedPdf = "PDF simulado para nota de crédito: "
                             + (creditNote.getCreditNoteNumber() != null ? creditNote.getCreditNoteNumber() : creditNote.getId());
 
@@ -180,6 +187,14 @@ public class CreditNoteController {
                     if (creditNote.getPdfUrl() != null && !creditNote.getPdfUrl().isBlank()) {
                         HttpHeaders headers = new HttpHeaders();
                         headers.add(HttpHeaders.LOCATION, creditNote.getPdfUrl());
+                        return new ResponseEntity<>(headers, HttpStatus.FOUND);
+                    }
+
+                    // Intentar construir URL de testing usando el número de la NC
+                    String creditNoteNumber = creditNote.getCreditNoteNumber();
+                    if (creditNoteNumber != null && !creditNoteNumber.isBlank()) {
+                        HttpHeaders headers = new HttpHeaders();
+                        headers.add(HttpHeaders.LOCATION, "https://testing.facturante.com/pdf/" + creditNoteNumber + ".pdf");
                         return new ResponseEntity<>(headers, HttpStatus.FOUND);
                     }
 

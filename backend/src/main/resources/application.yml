@@ -26,6 +26,15 @@ app:
   cors:
     allowed-origins: http://localhost:5173
 
+jwt:
+  # Generar secretos base64 de al menos 256 bits. Nunca commitear reales.
+  access:
+    secret: "dGhpc19pc19hX3Rlc3RfYWNjZXNzX3NlY3JldF9iYXNlNjQ="
+    ttl-seconds: 900
+  refresh:
+    secret: "dGhpc19pc19hX3Rlc3RfcmVmcmVzaF9zZWNyZXRfYmFzZTY0"
+    ttl-seconds: 604800
+
 logging:
   level:
     com.gf: INFO

@@ -1,8 +1,9 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import useTransactions from '../hooks/useTransactions'
 import TransactionDetail from './TransactionDetail'
 import BillingSettings from './BillingSettings'
 import BillingConfirmationPage from './BillingConfirmationPage'
+import Login from './Login'
 import MainHeader from '../components/MainHeader'
 import StatsGrid from '../components/StatsGrid'
 import TransactionFilters from '../components/TransactionFilters'
@@ -16,6 +17,11 @@ import SimpleModal from '../components/SimpleModal'
 
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('accessToken'))
+
+  if (!isAuthenticated) {
+    return <Login />
+  }
   const {
     // state
     health,

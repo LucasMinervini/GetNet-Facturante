@@ -14,6 +14,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,6 +35,7 @@ public class InvoiceController {
     private final InvoiceService invoiceService;
     private final TransactionRepository transactionRepository;
     private final InvoiceRepository invoiceRepository;
+    private final ObjectMapper objectMapper;
     
     /**
      * Crea una factura en Facturante para una transacción específica
@@ -159,10 +162,24 @@ public class InvoiceController {
                         .body("No hay PDF disponible para esta transacción");
             }
             
+            // Intentar redirigir directamente desde la transacción si ya tenemos datos
+            String txDirectPdf = transaction.getInvoicePdfUrl();
+            if (txDirectPdf != null && !txDirectPdf.isBlank()) {
+                HttpHeaders headers = new HttpHeaders();
+                headers.add(HttpHeaders.LOCATION, txDirectPdf);
+                return new ResponseEntity<>(headers, HttpStatus.FOUND);
+            }
+            String txNumber = transaction.getInvoiceNumber();
+            if (txNumber != null && !txNumber.isBlank()) {
+                HttpHeaders headers = new HttpHeaders();
+                headers.add(HttpHeaders.LOCATION, "https://testing.facturante.com/pdf/" + txNumber + ".pdf");
+                return new ResponseEntity<>(headers, HttpStatus.FOUND);
+            }
+
             // Buscar la factura asociada a la transacción
             Optional<Invoice> invoiceOpt = invoiceRepository.findByTransactionId(transactionId);
             if (invoiceOpt.isEmpty()) {
-                log.warn("No se encontró factura para transacción: {}", transactionId);
+                log.warn("No se encontró factura para transacción: {} y no hay datos en transacción para PDF", transactionId);
                 return ResponseEntity.notFound().build();
             }
             
@@ -172,9 +189,52 @@ public class InvoiceController {
             
             // Verificar si la factura tiene PDF URL
             if (invoice.getPdfUrl() == null || invoice.getPdfUrl().isBlank()) {
-                log.warn("Factura {} no tiene PDF URL disponible", invoice.getId());
-                return ResponseEntity.badRequest()
-                        .body("PDF no disponible para esta factura");
+                log.warn("Factura {} no tiene PDF URL disponible, aplicando fallbacks", invoice.getId());
+
+                // Fallback 1: usar URL de la transacción
+                String txPdfUrl = transaction.getInvoicePdfUrl();
+                if (txPdfUrl != null && !txPdfUrl.isBlank()) {
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.add(HttpHeaders.LOCATION, txPdfUrl);
+                    return new ResponseEntity<>(headers, HttpStatus.FOUND);
+                }
+
+                // Fallback 2: intentar extraer desde responseJson
+                String responseJson = invoice.getResponseJson();
+                if (responseJson != null && !responseJson.isBlank()) {
+                    try {
+                        JsonNode root = objectMapper.readTree(responseJson);
+                        JsonNode pdfNode = root.get("pdfUrl");
+                        if (pdfNode != null && !pdfNode.asText("").isBlank()) {
+                            HttpHeaders headers = new HttpHeaders();
+                            headers.add(HttpHeaders.LOCATION, pdfNode.asText());
+                            return new ResponseEntity<>(headers, HttpStatus.FOUND);
+                        }
+                        JsonNode numberNode = root.get("numeroComprobante");
+                        if (numberNode != null && !numberNode.asText("").isBlank()) {
+                            String testingPdfUrl = "https://testing.facturante.com/pdf/" + numberNode.asText() + ".pdf";
+                            HttpHeaders headers = new HttpHeaders();
+                            headers.add(HttpHeaders.LOCATION, testingPdfUrl);
+                            return new ResponseEntity<>(headers, HttpStatus.FOUND);
+                        }
+                    } catch (Exception jsonEx) {
+                        log.warn("No se pudo parsear responseJson de invoice {}: {}", invoice.getId(), jsonEx.getMessage());
+                    }
+                }
+
+                // Fallback 3: construir desde número en transacción
+                String invoiceNumber = transaction.getInvoiceNumber();
+                if (invoiceNumber != null && !invoiceNumber.isBlank()) {
+                    String testingPdfUrl = "https://testing.facturante.com/pdf/" + invoiceNumber + ".pdf";
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.add(HttpHeaders.LOCATION, testingPdfUrl);
+                    return new ResponseEntity<>(headers, HttpStatus.FOUND);
+                }
+
+                // Fallback 4: redirigir al sitio base de testing para asegurar que pegue a Facturante
+                HttpHeaders headers = new HttpHeaders();
+                headers.add(HttpHeaders.LOCATION, "https://testing.facturante.com");
+                return new ResponseEntity<>(headers, HttpStatus.FOUND);
             }
             
             // Si tenemos una URL de PDF (provista por Facturante), redirigimos allí

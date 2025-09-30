@@ -85,8 +85,32 @@ const applyFiltersSortPaginate = (items, params) => {
   return { content, totalElements, totalPages }
 }
 
+// Axios instance con Authorization automático
+const axiosInstance = axios.create({ baseURL: API })
+axiosInstance.interceptors.request.use((config) => {
+  const token = localStorage.getItem('accessToken')
+  if (token) {
+    config.headers = config.headers || {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+axiosInstance.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    if (err?.response?.status === 401) {
+      try { localStorage.removeItem('accessToken') } catch {}
+      if (typeof window !== 'undefined') {
+        // Redirigir a login si hay navegación disponible
+        window.location.href = '/'
+      }
+    }
+    return Promise.reject(err)
+  }
+)
+
 const apiGet = async (url) => {
-  if (!USE_MOCKS) return axios.get(url)
+  if (!USE_MOCKS) return axiosInstance.get(url)
   ensureMockData()
   await mockDelay()
   if (url.endsWith('/api/health')) {
@@ -109,7 +133,7 @@ const apiGet = async (url) => {
 }
 
 const apiPost = async (url) => {
-  if (!USE_MOCKS) return axios.post(url)
+  if (!USE_MOCKS) return axiosInstance.post(url)
   ensureMockData()
   await mockDelay()
   if (url.endsWith('/api/transactions/initialize-billing-status')) {
@@ -144,7 +168,7 @@ const apiPost = async (url) => {
   return { data: {} }
 }
 
-const HTTP = USE_MOCKS ? { get: apiGet, post: apiPost } : axios
+const HTTP = USE_MOCKS ? { get: apiGet, post: apiPost } : { get: apiGet, post: apiPost }
 
 export { API, USE_MOCKS, HTTP }
 

@@ -1,6 +1,7 @@
 package com.gf.connector;
 
 import com.gf.connector.service.BillingSettingsService;
+import com.gf.connector.service.UserService;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
@@ -30,6 +31,21 @@ public class ConnectorBackendApplication {
     return args -> {
       // Crear configuración por defecto si no existe
       billingSettingsService.createDefaultSettingsIfNotExists();
+    };
+  }
+
+  @Bean
+  public CommandLineRunner initDefaultUser(UserService userService) {
+    return args -> {
+      // Crear usuario admin por defecto si no existe
+      if (userService.findByUsername("admin").isEmpty()) {
+        try {
+          userService.createUser("admin", "admin", "admin@getnet-facturante.com", "Admin", "User");
+          System.out.println("Usuario admin creado: admin/admin");
+        } catch (Exception e) {
+          System.err.println("Error al crear usuario admin: " + e.getMessage());
+        }
+      }
     };
   }
 }
