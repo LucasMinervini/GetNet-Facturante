@@ -53,7 +53,7 @@ export default function Login({ onSuccess }) {
           {loading ? 'Ingresando...' : 'Ingresar'}
         </button>
         <div style={{ marginTop: '10px', fontSize: '12px', opacity: 0.8, textAlign: 'center' }}>
-          Demo: admin / admin
+          ¿No tienes cuenta? <a href="/register" style={{ color: '#93c5fd' }}>Regístrate</a>
         </div>
       </form>
     </div>

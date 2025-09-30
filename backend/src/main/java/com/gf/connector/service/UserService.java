@@ -1,7 +1,9 @@
 package com.gf.connector.service;
 
 import com.gf.connector.domain.User;
+import com.gf.connector.domain.Role;
 import com.gf.connector.repo.UserRepository;
+import com.gf.connector.repo.RoleRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -21,6 +23,7 @@ public class UserService implements UserDetailsService {
     
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RoleRepository roleRepository;
     
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
@@ -31,10 +34,12 @@ public class UserService implements UserDetailsService {
             throw new UsernameNotFoundException("Usuario inactivo: " + username);
         }
         
+        String roleName = user.getRole() != null ? user.getRole().getName() : "Viewer";
+        String springRole = "ROLE_" + roleName.toUpperCase();
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getUsername())
                 .password(user.getPassword())
-                .authorities("ROLE_USER", "ROLE_ADMIN") // Simplificado para MVP
+                .authorities(springRole)
                 .build();
     }
     
@@ -48,6 +53,12 @@ public class UserService implements UserDetailsService {
             throw new IllegalArgumentException("El email ya está registrado: " + email);
         }
         
+        // Rol por defecto Viewer (crear si no existe)
+        Role viewerRole = roleRepository.findByName("Viewer").orElseGet(() -> {
+            Role r = Role.builder().name("Viewer").build();
+            return roleRepository.save(r);
+        });
+
         User user = User.builder()
                 .username(username)
                 .password(passwordEncoder.encode(password))
@@ -55,6 +66,7 @@ public class UserService implements UserDetailsService {
                 .firstName(firstName)
                 .lastName(lastName)
                 .isActive(true)
+                .role(viewerRole)
                 .build();
         
         return userRepository.save(user);

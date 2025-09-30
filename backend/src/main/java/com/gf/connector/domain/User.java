@@ -41,6 +41,10 @@ public class User {
 
     private OffsetDateTime updatedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "role_id")
+    private Role role;
+
     @PrePersist
     public void prePersist() {
         createdAt = OffsetDateTime.now();

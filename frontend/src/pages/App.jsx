@@ -4,6 +4,7 @@ import TransactionDetail from './TransactionDetail'
 import BillingSettings from './BillingSettings'
 import BillingConfirmationPage from './BillingConfirmationPage'
 import Login from './Login'
+import Registration from './Registration'
 import MainHeader from '../components/MainHeader'
 import StatsGrid from '../components/StatsGrid'
 import TransactionFilters from '../components/TransactionFilters'
@@ -18,8 +19,25 @@ import SimpleModal from '../components/SimpleModal'
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('accessToken'))
+  const [route, setRoute] = useState(() => (typeof window !== 'undefined' ? window.location.pathname : '/'))
+
+  React.useEffect(() => {
+    const onPop = () => setRoute(window.location.pathname)
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  const navigate = (path) => {
+    if (window.location.pathname !== path) {
+      window.history.pushState({}, '', path)
+      setRoute(path)
+    }
+  }
 
   if (!isAuthenticated) {
+    if (route === '/register') {
+      return <Registration onSuccess={() => navigate('/')} />
+    }
     return <Login />
   }
   const {
