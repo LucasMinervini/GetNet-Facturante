@@ -34,4 +34,14 @@ public interface BillingSettingsRepository extends JpaRepository<BillingSettings
      * Busca configuración por secreto de webhook (ruteo multi-tenant)
      */
     Optional<BillingSettings> findByWebhookSecret(String webhookSecret);
+    
+    /**
+     * Busca configuración activa por tenantId
+     */
+    Optional<BillingSettings> findByTenantIdAndActivoTrue(UUID tenantId);
+    
+    /**
+     * Busca todas las configuraciones activas (para reconciliación)
+     */
+    java.util.List<BillingSettings> findByActivoTrue();
 }

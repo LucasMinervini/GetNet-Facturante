@@ -106,4 +106,21 @@ public interface TransactionRepository extends JpaRepository<Transaction, UUID> 
     
     // Método para eliminar transacciones de prueba
     void deleteByExternalIdStartingWith(String prefix);
+    
+    // Métodos para Dashboard y Reportes
+    long countByTenantIdAndCreatedAtBetween(UUID tenantId, OffsetDateTime start, OffsetDateTime end);
+    long countByCreatedAtBetween(OffsetDateTime start, OffsetDateTime end);
+    
+    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t WHERE t.tenantId = :tenantId AND t.createdAt BETWEEN :start AND :end")
+    Optional<Double> sumAmountByTenantIdAndCreatedAtBetween(@Param("tenantId") UUID tenantId, @Param("start") OffsetDateTime start, @Param("end") OffsetDateTime end);
+    
+    @Query("SELECT COALESCE(SUM(t.amount), 0) FROM Transaction t WHERE t.createdAt BETWEEN :start AND :end")
+    Optional<Double> sumAmountByCreatedAtBetween(@Param("start") OffsetDateTime start, @Param("end") OffsetDateTime end);
+    
+    long countByTenantIdAndCreatedAtBetweenAndBillingStatusIsNull(UUID tenantId, OffsetDateTime start, OffsetDateTime end);
+    long countByCreatedAtBetweenAndBillingStatusIsNull(OffsetDateTime start, OffsetDateTime end);
+    
+    // Métodos para reconciliación
+    List<Transaction> findByTenantIdAndCreatedAtBetween(UUID tenantId, OffsetDateTime start, OffsetDateTime end);
+    List<Transaction> findByCreatedAtBetween(OffsetDateTime start, OffsetDateTime end);
 }

@@ -44,6 +44,19 @@ jwt:
   refresh:
     secret: "dGhpc19pc19hX3Rlc3RfcmVmcmVzaF9zZWNyZXRfYmFzZTY0"
     ttl-seconds: 604800
+  issuer: "gf-connector"
+  audience: "getnet-facturante"
+  
+# Configuración de seguridad adicional
+security:
+  cors:
+    allowed-origins: ${app.cors.allowed-origins:http://localhost:5173}
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+    allowed-headers: "*"
+    allow-credentials: true
+  rate-limit:
+    enabled: true
+    requests-per-minute: 60
 
 logging:
   level:
@@ -71,3 +84,35 @@ facturante:
   password: 
   prefijo: 00001
   tipo-comprobante: FB
+
+# Configuración de notificaciones por email
+notification:
+  email:
+    enabled: true
+    admin-email: admin@getnet-facturante.com
+    from: noreply@getnet-facturante.com
+    smtp:
+      host: smtp.gmail.com
+      port: 587
+      username: 
+      password: 
+      auth: true
+      starttls: true
+
+# Configuración de reconciliación
+reconciliation:
+  enabled: true
+  days-to-check: 7
+  cron:
+    daily: "0 0 2 * * ?"
+    weekly: "0 0 3 * * SUN"
+    cleanup: "0 0 4 1 * ?"
+
+# Configuración de backup automático
+backup:
+  enabled: true
+  directory: ./backups
+  retention-days: 30
+  cron:
+    daily: "0 0 1 * * ?"
+    weekly: "0 30 0 * * SUN"

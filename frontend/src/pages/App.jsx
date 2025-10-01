@@ -5,6 +5,8 @@ import BillingSettings from './BillingSettings'
 import BillingConfirmationPage from './BillingConfirmationPage'
 import Login from './Login'
 import Registration from './Registration'
+import Dashboard from '../components/Dashboard'
+import Reports from '../components/Reports'
 import MainHeader from '../components/MainHeader'
 import StatsGrid from '../components/StatsGrid'
 import TransactionFilters from '../components/TransactionFilters'
@@ -40,6 +42,16 @@ export default function App() {
         }
         return <Login />
       }
+
+  // Renderizar Dashboard si está en la ruta /dashboard
+  if (route === '/dashboard') {
+    return <Dashboard />
+  }
+
+  // Renderizar Reportes si está en la ruta /reports
+  if (route === '/reports') {
+    return <Reports />
+  }
   const {
     // state
     health,
@@ -184,6 +196,33 @@ export default function App() {
         </div>
         <div className="header-buttons">
           <button
+            onClick={() => navigate('/dashboard')}
+            className="btn btn-primary"
+            style={{ padding: '0.5rem 1rem', marginRight: '0.5rem' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="3" width="7" height="7"/>
+              <rect x="14" y="3" width="7" height="7"/>
+              <rect x="14" y="14" width="7" height="7"/>
+              <rect x="3" y="14" width="7" height="7"/>
+            </svg>
+            Dashboard
+          </button>
+          <button
+            onClick={() => navigate('/reports')}
+            className="btn btn-secondary"
+            style={{ padding: '0.5rem 1rem', marginRight: '0.5rem' }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14,2 14,8 20,8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10,9 9,9 8,9"/>
+            </svg>
+            Reportes
+          </button>
+          <button
             onClick={handleOpenSettings}
             className="btn btn-secondary"
             style={{ padding: '0.5rem 1rem' }}
@@ -194,7 +233,6 @@ export default function App() {
             </svg>
             Configuración
           </button>
-          {/* Toggle de tema eliminado */}
         </div>
         <div className="header-content">
           <div className="header-title">

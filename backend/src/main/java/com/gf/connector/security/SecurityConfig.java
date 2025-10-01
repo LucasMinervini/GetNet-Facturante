@@ -23,26 +23,29 @@ public class SecurityConfig {
     public SecurityConfig() {}
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter, RateLimitFilter rateLimitFilter) throws Exception {
         http
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
-                // Auth y Webhooks
+                // Auth y Webhooks (públicos)
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/webhooks/**").permitAll()
                 .requestMatchers("/actuator/health", "/health").permitAll()
                 .requestMatchers("/api/health").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                
+                // Swagger/OpenAPI (solo en desarrollo)
+                .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 
                 // Transactions (lectura para USER+, acciones sensibles ADMIN)
-                .requestMatchers(HttpMethod.GET, "/api/transactions/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/transactions/**").hasAnyRole("USER", "ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/transactions/reset-error-to-pending").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/transactions/initialize-billing-status").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/transactions/create-test-data").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/transactions/setup-test-data").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.POST, "/api/transactions/*/confirm-billing").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.GET, "/api/transactions/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/transactions/test-getnet-connection").hasRole("ADMIN")
 
                 // Invoices (crear/reemitir ADMIN, lectura/pdf USER+)
                 .requestMatchers(HttpMethod.POST, "/api/invoices/**").hasRole("ADMIN")
@@ -53,11 +56,23 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/billing-settings/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/billing-settings/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/billing-settings/**").hasRole("ADMIN")
+                
+                // Credit Notes (ADMIN only)
+                .requestMatchers("/api/credit-notes/**").hasRole("ADMIN")
 
                 // Cualquier otro endpoint autenticado por defecto
                 .anyRequest().authenticated()
+            )
+            .headers(headers -> headers
+                .frameOptions(frameOptions -> frameOptions.deny())
+                .contentTypeOptions(contentTypeOptions -> {})
+                .httpStrictTransportSecurity(hstsConfig -> hstsConfig
+                    .maxAgeInSeconds(31536000)
+                    .includeSubDomains(true)
+                )
             );
 
+        http.addFilterBefore(rateLimitFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
