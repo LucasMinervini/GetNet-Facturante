@@ -51,7 +51,7 @@ public class CreditNoteService {
         }
 
         // Obtener estrategia de configuración
-        String strategy = getCreditNoteStrategy();
+        String strategy = getCreditNoteStrategy(transaction.getTenantId());
         log.info("Estrategia de nota de crédito: {}", strategy);
 
         // Crear nota de crédito según la estrategia
@@ -189,8 +189,8 @@ public class CreditNoteService {
     /**
      * Obtiene la estrategia de nota de crédito desde la configuración
      */
-    private String getCreditNoteStrategy() {
-        return billingSettingsService.getActiveSettings()
+    private String getCreditNoteStrategy(UUID tenantId) {
+        return billingSettingsService.getActiveSettings(tenantId)
                 .map(settings -> settings.getCreditNoteStrategy())
                 .orElse("stub"); // Default a stub si no hay configuración
     }

@@ -13,20 +13,25 @@ public interface BillingSettingsRepository extends JpaRepository<BillingSettings
     /**
      * Obtiene la configuración activa de facturación
      */
-    Optional<BillingSettings> findByActivoTrue();
+    Optional<BillingSettings> findByActivoTrueAndTenantId(java.util.UUID tenantId);
     
     /**
      * Verifica si existe una configuración activa
      */
-    boolean existsByActivoTrue();
+    boolean existsByActivoTrueAndTenantId(java.util.UUID tenantId);
     
     /**
      * Desactiva todas las configuraciones (para activar solo una)
      */
-    void deleteByActivoTrue();
+    void deleteByActivoTrueAndTenantId(java.util.UUID tenantId);
     
     /**
      * Desactiva todas las configuraciones excepto la especificada
      */
-    void deleteByActivoTrueAndIdNot(UUID id);
+    void deleteByActivoTrueAndIdNotAndTenantId(UUID id, java.util.UUID tenantId);
+
+    /**
+     * Busca configuración por secreto de webhook (ruteo multi-tenant)
+     */
+    Optional<BillingSettings> findByWebhookSecret(String webhookSecret);
 }

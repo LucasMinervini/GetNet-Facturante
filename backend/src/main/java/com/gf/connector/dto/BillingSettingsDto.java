@@ -24,6 +24,7 @@ public class BillingSettingsDto {
     private boolean enviarComprobante;
     private boolean activo;
     private String descripcion;
+    private String webhookSecret;
     private OffsetDateTime createdAt;
     private OffsetDateTime updatedAt;
     
@@ -44,6 +45,7 @@ public class BillingSettingsDto {
         dto.setEnviarComprobante(Boolean.TRUE.equals(settings.getEnviarComprobante()));
         dto.setActivo(Boolean.TRUE.equals(settings.getActivo()));
         dto.setDescripcion(settings.getDescripcion());
+        // Secret no se expone por defecto; opcional: dto.setWebhookSecret(...)
         dto.setCreatedAt(settings.getCreatedAt());
         dto.setUpdatedAt(settings.getUpdatedAt());
         return dto;

@@ -6,7 +6,6 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -29,13 +28,35 @@ public class SecurityConfig {
             .csrf(csrf -> csrf.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
+                // Auth y Webhooks
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/webhooks/**").permitAll()
                 .requestMatchers("/actuator/health", "/health").permitAll()
+                .requestMatchers("/api/health").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // Transactions (lectura para USER+, acciones sensibles ADMIN)
+                .requestMatchers(HttpMethod.GET, "/api/transactions/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/transactions/reset-error-to-pending").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/transactions/initialize-billing-status").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/transactions/create-test-data").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/transactions/setup-test-data").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/transactions/*/confirm-billing").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/transactions/**").permitAll()
+
+                // Invoices (crear/reemitir ADMIN, lectura/pdf USER+)
+                .requestMatchers(HttpMethod.POST, "/api/invoices/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/invoices/**").hasAnyRole("USER", "ADMIN")
+
+                // Billing settings (lectura USER+, escritura ADMIN)
+                .requestMatchers(HttpMethod.GET, "/api/billing-settings/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.POST, "/api/billing-settings/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.PUT, "/api/billing-settings/**").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.DELETE, "/api/billing-settings/**").hasRole("ADMIN")
+
+                // Cualquier otro endpoint autenticado por defecto
                 .anyRequest().authenticated()
-            )
-            .httpBasic(Customizer.withDefaults());
+            );
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();

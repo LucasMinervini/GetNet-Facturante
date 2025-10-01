@@ -7,7 +7,9 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "transactions")
+@Table(name = "transactions", indexes = {
+    @Index(name = "idx_transactions_tenant", columnList = "tenant_id")
+})
 @Getter @Setter @Builder
 @NoArgsConstructor @AllArgsConstructor
 public class Transaction {
@@ -63,6 +65,9 @@ public class Transaction {
     
     @Column(name = "credit_note_pdf_url")
     private String creditNotePdfUrl; // URL del PDF de la nota de crédito
+
+    @Column(name = "tenant_id", nullable = false)
+    private java.util.UUID tenantId;
 
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

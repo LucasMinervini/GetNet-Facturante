@@ -6,7 +6,9 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", indexes = {
+    @Index(name = "idx_users_tenant", columnList = "tenant_id")
+})
 @Getter @Setter @Builder
 @NoArgsConstructor @AllArgsConstructor
 public class User {
@@ -44,6 +46,9 @@ public class User {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "role_id")
     private Role role;
+
+    @Column(name = "tenant_id", nullable = false)
+    private java.util.UUID tenantId;
 
     @PrePersist
     public void prePersist() {

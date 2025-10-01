@@ -35,6 +35,7 @@ public class WebhookService {
     private final InvoiceService invoiceService;
     private final CreditNoteService creditNoteService;
     private final BillingSettingsService billingSettingsService;
+    private static final java.util.UUID DEFAULT_TEST_TENANT = java.util.UUID.fromString("00000000-0000-0000-0000-000000000001");
 
     /**
      * Procesa un payload de webhook de Getnet de forma completa:
@@ -44,7 +45,7 @@ public class WebhookService {
      * 4. Genera factura automáticamente si la transacción está pagada
      */
     @Transactional
-    public WebhookProcessingResult processGetnetPayload(String rawJson, Map<String, Object> payload) {
+    public WebhookProcessingResult processGetnetPayload(String rawJson, Map<String, Object> payload, java.util.UUID tenantId) {
         WebhookEvent webhookEvent = null;
         Transaction transaction = null;
         Invoice invoice = null;
@@ -53,10 +54,31 @@ public class WebhookService {
         try {
             log.info("Iniciando procesamiento de webhook de Getnet");
             
-            // 1. Persistir evento de webhook para auditoría
+            // 1. Persistir evento de webhook para auditoría con idempotencia
+            String eventHash = sha256Hex(rawJson);
+            // Intentar encontrar un evento existente con el mismo hash
+            WebhookEvent existingEvent = null;
+            try {
+                existingEvent = webhookEventRepository.findAll().stream()
+                        .filter(e -> eventHash.equals(e.getEventHash()))
+                        .findFirst().orElse(null);
+            } catch (Exception ignored) {}
+
+            if (existingEvent != null && Boolean.TRUE.equals(existingEvent.isProcessed())) {
+                log.info("Evento duplicado detectado (idempotente), omitiendo procesamiento");
+                return WebhookProcessingResult.builder()
+                        .success(true)
+                        .webhookEvent(existingEvent)
+                        .transaction(null)
+                        .invoice(null)
+                        .message("Duplicate webhook ignored by idempotency")
+                        .build();
+            }
+
             webhookEvent = WebhookEvent.builder()
                     .provider("getnet")
                     .payload(rawJson)
+                    .eventHash(eventHash)
                     .processed(false)
                     .build();
             webhookEvent = webhookEventRepository.save(webhookEvent);
@@ -64,6 +86,7 @@ public class WebhookService {
 
             // 2. Transformar payload a transacción usando servicio especializado
             transaction = transformationService.transformWebhookToTransaction(rawJson, payload);
+            transaction.setTenantId(tenantId);
             log.info("Payload transformado a transacción: ID={}, Amount={}, Status={}", 
                     transaction.getExternalId(), transaction.getAmount(), transaction.getStatus());
 
@@ -78,6 +101,7 @@ public class WebhookService {
                 existingTransaction.setCurrency(transaction.getCurrency());
                 existingTransaction.setStatus(transaction.getStatus());
                 existingTransaction.setCustomerDoc(transaction.getCustomerDoc());
+                existingTransaction.setTenantId(tenantId);
                 transaction = transactionRepository.save(existingTransaction);
             } else {
                 // Crear nueva transacción
@@ -87,7 +111,7 @@ public class WebhookService {
 
             // 4. Determinar si generar factura automáticamente o marcar para confirmación
             if (shouldGenerateInvoice(transaction)) {
-                var settings = billingSettingsService.getActiveSettings().orElse(null);
+                var settings = billingSettingsService.getActiveSettings(tenantId).orElse(null);
                 
                 if (settings != null && Boolean.TRUE.equals(settings.getRequireBillingConfirmation())) {
                     // Marcar para confirmación manual
@@ -165,13 +189,30 @@ public class WebhookService {
                     .build();
         }
     }
+
+    // Overload para tests (sin tenantId expl cito)
+    public WebhookProcessingResult processGetnetPayload(String rawJson, Map<String, Object> payload) {
+        return processGetnetPayload(rawJson, payload, DEFAULT_TEST_TENANT);
+    }
+
+    private static String sha256Hex(String data) {
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest((data != null ? data : "").getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(digest.length * 2);
+            for (byte b : digest) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            throw new RuntimeException("Error computing SHA-256", e);
+        }
+    }
     
     /**
      * Determina si se debe generar una factura automáticamente
      */
     private boolean shouldGenerateInvoice(Transaction transaction) {
         // Obtener configuración activa
-        var settings = billingSettingsService.getActiveSettings().orElse(null);
+        var settings = billingSettingsService.getActiveSettings(transaction.getTenantId()).orElse(null);
         
         // Aplicar regla de facturar solo PAID si está configurada
         if (settings != null && Boolean.TRUE.equals(settings.getFacturarSoloPaid())) {

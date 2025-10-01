@@ -38,11 +38,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String username = jwtTokenService.validateAccessTokenAndGetSubject(token);
             if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                UserDetails userDetails = userDetailsService.loadUserByUsername(username);
+                // Usar las autoridades del token en lugar de cargar desde BD
+                var claims = jwtTokenService.getTokenClaims(token);
+                var roles = (java.util.List<?>) claims.get("roles");
+                var authorities = new java.util.ArrayList<org.springframework.security.core.GrantedAuthority>();
+                
+                if (roles != null) {
+                    for (Object role : roles) {
+                        if (role instanceof java.util.Map) {
+                            var roleMap = (java.util.Map<?, ?>) role;
+                            var authority = roleMap.get("authority");
+                            if (authority instanceof String) {
+                                authorities.add(() -> (String) authority);
+                            }
+                        }
+                    }
+                }
+                
                 UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                        userDetails, null, userDetails.getAuthorities());
+                        username, null, authorities);
                 authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
                 SecurityContextHolder.getContext().setAuthentication(authentication);
+                String tenantId = jwtTokenService.getTenantIdClaim(token);
+                if (tenantId != null && !tenantId.trim().isEmpty()) {
+                    try {
+                        request.setAttribute("tenantId", java.util.UUID.fromString(tenantId));
+                        System.out.println("DEBUG: tenantId extraído del token: " + tenantId);
+                    } catch (Exception e) {
+                        System.out.println("ERROR: No se pudo parsear tenantId: " + tenantId + " - " + e.getMessage());
+                    }
+                } else {
+                    System.out.println("DEBUG: tenantId es null o vacío en el token");
+                }
             }
         } catch (Exception e) {
             // Token inválido/expirado: continuar sin autenticar, security chain bloqueará si es requerido

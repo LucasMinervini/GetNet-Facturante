@@ -21,6 +21,10 @@ public class WebhookEvent {
     @Column(columnDefinition = "TEXT")
     private String payload;
 
+    // Hash único del evento para idempotencia (p. ej., SHA-256 del body)
+    @Column(name = "event_hash", length = 64, unique = true)
+    private String eventHash;
+
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;
 

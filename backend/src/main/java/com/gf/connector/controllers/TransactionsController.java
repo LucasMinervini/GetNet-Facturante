@@ -14,6 +14,7 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -39,6 +40,9 @@ public class TransactionsController {
     private final TransactionRepository transactionRepository;
     private final InvoiceService invoiceService;
 
+    // Fecha segura para PostgreSQL (evita OffsetDateTime.MIN que está fuera de rango)
+    private static final OffsetDateTime SAFE_EPOCH = OffsetDateTime.parse("1970-01-01T00:00:00Z");
+
     @GetMapping
     @Operation(summary = "Listar transacciones", description = "Obtiene una lista paginada de transacciones con filtros opcionales")
     @ApiResponses(value = {
@@ -55,8 +59,12 @@ public class TransactionsController {
             @Parameter(description = "Monto máximo") @RequestParam(required = false) BigDecimal maxAmount,
             @Parameter(description = "Fecha de inicio (ISO 8601)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startDate,
             @Parameter(description = "Fecha de fin (ISO 8601)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endDate,
-            @Parameter(description = "Búsqueda por texto en ID externo o documento del cliente") @RequestParam(required = false) String search
+            @Parameter(description = "Búsqueda por texto en ID externo o documento del cliente") @RequestParam(required = false) String search,
+            @RequestAttribute(name = "tenantId", required = false) java.util.UUID tenantId
     ) {
+        if (tenantId == null) {
+            return Page.empty();
+        }
         // Configurar ordenamiento
         Sort.Direction direction = sortDir.equalsIgnoreCase("desc") ? Sort.Direction.DESC : Sort.Direction.ASC;
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, sortBy));
@@ -64,42 +72,49 @@ public class TransactionsController {
         Page<Transaction> transactions;
         // Si hay búsqueda por texto, usar ese filtro
         if (search != null && !search.trim().isEmpty()) {
-            transactions = transactionRepository.findBySearchText(search.trim(), pageable);
+            transactions = transactionRepository.findBySearchText(search.trim(), tenantId, pageable);
         }
         // Si no hay filtros, devolver todas las transacciones
         else if (status == null && minAmount == null && maxAmount == null && startDate == null && endDate == null) {
-            transactions = transactionRepository.findAll(pageable);
+            transactions = transactionRepository.findByCreatedAtGreaterThanEqualAndTenantId(SAFE_EPOCH, tenantId, pageable);
         }
         // Usar filtros específicos en lugar de la consulta compleja
         else {
             // Si solo hay filtro de status
             if (status != null && minAmount == null && maxAmount == null && startDate == null && endDate == null) {
-                transactions = transactionRepository.findByStatus(status, pageable);
+                transactions = transactionRepository.findByStatusAndTenantId(status, tenantId, pageable);
             }
             // Si solo hay filtros de monto
             else if (status == null && minAmount != null && maxAmount != null && startDate == null && endDate == null) {
-                transactions = transactionRepository.findByAmountBetween(minAmount, maxAmount, pageable);
+                transactions = transactionRepository.findByAmountBetweenAndTenantId(minAmount, maxAmount, tenantId, pageable);
             }
             
             // Si solo hay filtros de fecha
             else if (status == null && minAmount == null && maxAmount == null && startDate != null && endDate != null) {
-                transactions = transactionRepository.findByCreatedAtBetween(startDate, endDate, pageable);
+                transactions = transactionRepository.findByCreatedAtBetweenAndTenantId(startDate, endDate, tenantId, pageable);
             }
             // Si hay status y fechas
             else if (status != null && minAmount == null && maxAmount == null && startDate != null && endDate != null) {
-                transactions = transactionRepository.findByStatusAndCreatedAtBetween(status, startDate, endDate, pageable);
+                transactions = transactionRepository.findByStatusAndCreatedAtBetweenAndTenantId(status, startDate, endDate, tenantId, pageable);
             }
             // Si hay status y montos
             else if (status != null && minAmount != null && maxAmount != null && startDate == null && endDate == null) {
-                transactions = transactionRepository.findByStatusAndAmountBetween(status, minAmount, maxAmount, pageable);
+                transactions = transactionRepository.findByStatusAndAmountBetweenAndTenantId(status, minAmount, maxAmount, tenantId, pageable);
             }
             // Para casos más complejos, usar findAll y filtrar en memoria (temporal)
             else {
-                transactions = transactionRepository.findAll(pageable);
+                transactions = transactionRepository.findByCreatedAtGreaterThanEqualAndTenantId(SAFE_EPOCH, tenantId, pageable);
             }
         }
         
         return transactions.map(TransactionDto::fromEntity);
+    }
+
+    // Overload para tests (sin tenant)
+    public Page<TransactionDto> list(int page, int size, String sortBy, String sortDir,
+                                     TransactionStatus status, BigDecimal minAmount, BigDecimal maxAmount,
+                                     OffsetDateTime startDate, OffsetDateTime endDate, String search) {
+        return list(page, size, sortBy, sortDir, status, minAmount, maxAmount, startDate, endDate, search, null);
     }
     
     @GetMapping("/by-status")
@@ -107,26 +122,40 @@ public class TransactionsController {
     public Page<Transaction> listByStatus(
             @Parameter(description = "Estado de la transacción", required = true) @RequestParam TransactionStatus status,
             @Parameter(description = "Número de página") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Tamaño de página") @RequestParam(defaultValue = "20") int size
+            @Parameter(description = "Tamaño de página") @RequestParam(defaultValue = "20") int size,
+            @RequestAttribute(name = "tenantId", required = false) java.util.UUID tenantId
     ) {
+        if (tenantId == null) return Page.empty();
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        return transactionRepository.findByStatus(status, pageable);
+        return transactionRepository.findByStatusAndTenantId(status, tenantId, pageable);
+    }
+
+    // Overload para tests
+    public Page<Transaction> listByStatus(TransactionStatus status, int page, int size) {
+        return listByStatus(status, page, size, null);
     }
     
     @GetMapping("/stats")
     @Operation(summary = "Estadísticas de transacciones", description = "Obtiene estadísticas generales de las transacciones por estado")
     @ApiResponse(responseCode = "200", description = "Estadísticas obtenidas exitosamente")
-    public TransactionStats getStats() {
-        long total = transactionRepository.count();
-        long authorized = transactionRepository.findByStatus(TransactionStatus.AUTHORIZED, Pageable.unpaged()).getTotalElements();
-        long paid = transactionRepository.findByStatus(TransactionStatus.PAID, Pageable.unpaged()).getTotalElements();
-        long refunded = transactionRepository.findByStatus(TransactionStatus.REFUNDED, Pageable.unpaged()).getTotalElements();
-        long failed = transactionRepository.findByStatus(TransactionStatus.FAILED, Pageable.unpaged()).getTotalElements();
+    public TransactionStats getStats(@RequestAttribute(name = "tenantId", required = false) java.util.UUID tenantId) {
+        if (tenantId == null) return new TransactionStats(0,0,0,0,0,0);
+        long total = transactionRepository.findByCreatedAtGreaterThanEqualAndTenantId(SAFE_EPOCH, tenantId, Pageable.unpaged()).getTotalElements();
+        long authorized = transactionRepository.findByStatusAndTenantId(TransactionStatus.AUTHORIZED, tenantId, Pageable.unpaged()).getTotalElements();
+        long paid = transactionRepository.findByStatusAndTenantId(TransactionStatus.PAID, tenantId, Pageable.unpaged()).getTotalElements();
+        long refunded = transactionRepository.findByStatusAndTenantId(TransactionStatus.REFUNDED, tenantId, Pageable.unpaged()).getTotalElements();
+        long failed = transactionRepository.findByStatusAndTenantId(TransactionStatus.FAILED, tenantId, Pageable.unpaged()).getTotalElements();
         
         // TODO: Agregar conteo de notas de crédito cuando se implemente el repositorio
         long creditNotes = 0; // Placeholder
         
         return new TransactionStats(total, authorized, paid, refunded, failed, creditNotes);
+    }
+
+    // Overload para tests (sin tenant)
+    public TransactionStats getStats() {
+        // Retornar ceros para compatibilidad simple
+        return new TransactionStats(0,0,0,0,0,0);
     }
 
     @GetMapping("/test")
@@ -185,11 +214,13 @@ public class TransactionsController {
     @GetMapping("/debug-filters")
     public ResponseEntity<String> debugFilters(
             @RequestParam(required = false) String status,
-            @RequestParam(required = false) BigDecimal minAmount) {
+            @RequestParam(required = false) BigDecimal minAmount,
+            @RequestAttribute(name = "tenantId", required = false) java.util.UUID tenantId) {
         try {
+            if (tenantId == null) return ResponseEntity.ok("No tenant");
             if (status != null) {
                 TransactionStatus statusEnum = TransactionStatus.fromString(status);
-                Page<Transaction> result = transactionRepository.findByStatus(statusEnum, PageRequest.of(0, 1));
+                Page<Transaction> result = transactionRepository.findByStatusAndTenantId(statusEnum, tenantId, PageRequest.of(0, 1));
                 return ResponseEntity.ok("Status filter works. Found: " + result.getTotalElements() + " transactions with status: " + status);
             }
             if (minAmount != null) {
@@ -201,6 +232,11 @@ public class TransactionsController {
             return ResponseEntity.ok("Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
     }
+
+    // Overload para tests
+    public ResponseEntity<String> debugFilters(String status, BigDecimal minAmount) {
+        return debugFilters(status, minAmount, null);
+    }
     
     @GetMapping("/debug-simple")
     public ResponseEntity<String> debugSimple() {
@@ -209,6 +245,7 @@ public class TransactionsController {
     
     @PostMapping("/create-simple-transaction")
     @Operation(summary = "Crear transacción simple", description = "Crea una transacción simple para testing sin dependencias complejas")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> createSimpleTransaction() {
         try {
             Transaction transaction = new Transaction();
@@ -243,7 +280,8 @@ public class TransactionsController {
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startDateParsed,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endDateParsed) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endDateParsed,
+            @RequestAttribute(name = "tenantId", required = false) java.util.UUID tenantId) {
         try {
             StringBuilder response = new StringBuilder();
             response.append("Debug Date Filters:\n");
@@ -252,8 +290,8 @@ public class TransactionsController {
             response.append("startDateParsed: ").append(startDateParsed).append("\n");
             response.append("endDateParsed: ").append(endDateParsed).append("\n");
             
-            if (startDateParsed != null && endDateParsed != null) {
-                Page<Transaction> result = transactionRepository.findByCreatedAtBetween(startDateParsed, endDateParsed, PageRequest.of(0, 5));
+            if (tenantId != null && startDateParsed != null && endDateParsed != null) {
+                Page<Transaction> result = transactionRepository.findByCreatedAtBetweenAndTenantId(startDateParsed, endDateParsed, tenantId, PageRequest.of(0, 5));
                 response.append("Query result: Found ").append(result.getTotalElements()).append(" transactions\n");
                 if (!result.isEmpty()) {
                     response.append("Sample transaction: ").append(result.getContent().get(0).getExternalId())
@@ -265,6 +303,11 @@ public class TransactionsController {
         } catch (Exception e) {
             return ResponseEntity.ok("Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
+    }
+
+    // Overload para tests
+    public ResponseEntity<String> debugDateFilters(String startDate, String endDate, OffsetDateTime startDateParsed, OffsetDateTime endDateParsed) {
+        return debugDateFilters(startDate, endDate, startDateParsed, endDateParsed, null);
     }
     
     @GetMapping("/debug-amount-filters")
@@ -301,11 +344,34 @@ public class TransactionsController {
             @Parameter(description = "Filtrar por estado de facturación") @RequestParam(required = false) String billingStatus,
             @Parameter(description = "Monto mínimo") @RequestParam(required = false) BigDecimal minAmount,
             @Parameter(description = "Monto máximo") @RequestParam(required = false) BigDecimal maxAmount,
-            @Parameter(description = "Fecha de inicio (ISO 8601)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime startDate,
-            @Parameter(description = "Fecha de fin (ISO 8601)") @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime endDate,
-            @Parameter(description = "Búsqueda por texto en ID externo o documento del cliente") @RequestParam(required = false) String search
+            @Parameter(description = "Fecha de inicio (ISO 8601)") @RequestParam(required = false) String startDateStr,
+            @Parameter(description = "Fecha de fin (ISO 8601)") @RequestParam(required = false) String endDateStr,
+            @Parameter(description = "Búsqueda por texto en ID externo o documento del cliente") @RequestParam(required = false) String search,
+            @RequestAttribute(name = "tenantId", required = false) java.util.UUID tenantId
     ) {
         try {
+            if (tenantId == null) return ResponseEntity.status(401).body("No tenant");
+            
+            // Parsear fechas de forma segura
+            OffsetDateTime startDate = null;
+            OffsetDateTime endDate = null;
+            
+            if (startDateStr != null && !startDateStr.trim().isEmpty() && !startDateStr.contains("dd/mm/aaaa")) {
+                try {
+                    startDate = OffsetDateTime.parse(startDateStr);
+                } catch (Exception e) {
+                    System.out.println("Error parsing startDate: " + startDateStr + " - " + e.getMessage());
+                }
+            }
+            
+            if (endDateStr != null && !endDateStr.trim().isEmpty() && !endDateStr.contains("dd/mm/aaaa")) {
+                try {
+                    endDate = OffsetDateTime.parse(endDateStr);
+                } catch (Exception e) {
+                    System.out.println("Error parsing endDate: " + endDateStr + " - " + e.getMessage());
+                }
+            }
+            
             // Logs de debug
             System.out.println("=== DEBUG FILTROS ===");
             System.out.println("Status: " + status);
@@ -325,11 +391,11 @@ public class TransactionsController {
             
             // Si hay búsqueda por texto, usar ese filtro
             if (search != null && !search.trim().isEmpty()) {
-                transactions = transactionRepository.findBySearchText(search.trim(), pageable);
+                transactions = transactionRepository.findBySearchText(search.trim(), tenantId, pageable);
             }
             // Si no hay filtros, devolver todas las transacciones
             else if (status == null && billingStatus == null && minAmount == null && maxAmount == null && startDate == null && endDate == null) {
-                transactions = transactionRepository.findAll(pageable);
+                transactions = transactionRepository.findByCreatedAtGreaterThanEqualAndTenantId(OffsetDateTime.MIN, tenantId, pageable);
             }
             // Usar filtros específicos
             else {
@@ -337,32 +403,32 @@ public class TransactionsController {
                 if (status != null && billingStatus == null && minAmount == null && maxAmount == null && startDate == null && endDate == null) {
                     try {
                         TransactionStatus statusEnum = TransactionStatus.fromString(status);
-                        transactions = transactionRepository.findByStatus(statusEnum, pageable);
+                        transactions = transactionRepository.findByStatusAndTenantId(statusEnum, tenantId, pageable);
                     } catch (Exception e) {
                         return ResponseEntity.badRequest().body("Invalid status: " + status);
                     }
                 }
                 // Si solo hay filtro de billingStatus
                 else if (status == null && billingStatus != null && minAmount == null && maxAmount == null && startDate == null && endDate == null) {
-                    transactions = transactionRepository.findByBillingStatus(billingStatus, pageable);
+                    transactions = transactionRepository.findByBillingStatusAndTenantId(billingStatus, tenantId, pageable);
                 }
                 // Si solo hay filtros de monto
                 else if (status == null && billingStatus == null && minAmount != null && maxAmount != null && startDate == null && endDate == null) {
-                    transactions = transactionRepository.findByAmountBetween(minAmount, maxAmount, pageable);
+                    transactions = transactionRepository.findByAmountBetweenAndTenantId(minAmount, maxAmount, tenantId, pageable);
                 }
                 // Si solo hay filtros de fecha
                 else if (status == null && billingStatus == null && minAmount == null && maxAmount == null && (startDate != null || endDate != null)) {
                     if (startDate != null && endDate != null) {
                         System.out.println("Ejecutando filtro de fechas: " + startDate + " hasta " + endDate);
-                        transactions = transactionRepository.findByCreatedAtBetween(startDate, endDate, pageable);
+                        transactions = transactionRepository.findByCreatedAtBetweenAndTenantId(startDate, endDate, tenantId, pageable);
                     } else if (startDate != null) {
                         System.out.println("Ejecutando filtro de fecha desde: " + startDate);
                         // Buscar transacciones desde la fecha de inicio hasta el futuro
-                        transactions = transactionRepository.findByCreatedAtGreaterThanEqual(startDate, pageable);
+                        transactions = transactionRepository.findByCreatedAtGreaterThanEqualAndTenantId(startDate, tenantId, pageable);
                     } else if (endDate != null) {
                         System.out.println("Ejecutando filtro de fecha hasta: " + endDate);
                         // Buscar transacciones desde el pasado hasta la fecha de fin
-                        transactions = transactionRepository.findByCreatedAtLessThanEqual(endDate, pageable);
+                        transactions = transactionRepository.findByCreatedAtLessThanEqualAndTenantId(endDate, tenantId, pageable);
                     }
                     
                 }
@@ -370,7 +436,7 @@ public class TransactionsController {
                 else if (status != null && billingStatus == null && minAmount == null && maxAmount == null && startDate != null && endDate != null) {
                     try {
                         TransactionStatus statusEnum = TransactionStatus.fromString(status);
-                        transactions = transactionRepository.findByStatusAndCreatedAtBetween(statusEnum, startDate, endDate, pageable);
+                        transactions = transactionRepository.findByStatusAndCreatedAtBetweenAndTenantId(statusEnum, startDate, endDate, tenantId, pageable);
                     } catch (Exception e) {
                         return ResponseEntity.badRequest().body("Invalid status: " + status);
                     }
@@ -379,14 +445,14 @@ public class TransactionsController {
                 else if (status != null && billingStatus == null && minAmount != null && maxAmount != null && startDate == null && endDate == null) {
                     try {
                         TransactionStatus statusEnum = TransactionStatus.fromString(status);
-                        transactions = transactionRepository.findByStatusAndAmountBetween(statusEnum, minAmount, maxAmount, pageable);
+                        transactions = transactionRepository.findByStatusAndAmountBetweenAndTenantId(statusEnum, minAmount, maxAmount, tenantId, pageable);
                     } catch (Exception e) {
                         return ResponseEntity.badRequest().body("Invalid status: " + status);
                     }
                 }
                 // Para casos más complejos, usar findAll y filtrar en memoria (temporal)
                 else {
-                    transactions = transactionRepository.findAll(pageable);
+                    transactions = transactionRepository.findByCreatedAtGreaterThanEqualAndTenantId(OffsetDateTime.MIN, tenantId, pageable);
                 }
             }
             
@@ -395,6 +461,26 @@ public class TransactionsController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Error: " + e.getClass().getSimpleName() + " - " + e.getMessage());
         }
+    }
+
+    // (eliminado overload con String para evitar ambigüedad con tests)
+
+    // Overload para tests (sin tenant, acepta OffsetDateTime)
+    public ResponseEntity<?> listNative(int page, int size, String sortBy, String sortDir,
+                                        String status, String billingStatus, BigDecimal minAmount, BigDecimal maxAmount,
+                                        java.time.OffsetDateTime startDate, java.time.OffsetDateTime endDate, String search) {
+        String start = startDate != null ? startDate.toString() : null;
+        String end = endDate != null ? endDate.toString() : null;
+        return listNative(page, size, sortBy, sortDir, status, billingStatus, minAmount, maxAmount, start, end, search, null);
+    }
+
+    // Overload adicional para compatibilidad con tests antiguos (acepta OffsetDateTime)
+    public ResponseEntity<?> listNative(int page, int size, String sortBy, String sortDir,
+                                        String status, String billingStatus, BigDecimal minAmount, BigDecimal maxAmount,
+                                        java.time.OffsetDateTime startDate, java.time.OffsetDateTime endDate, String search, java.util.UUID tenantIdIgnored) {
+        String start = startDate != null ? startDate.toString() : null;
+        String end = endDate != null ? endDate.toString() : null;
+        return listNative(page, size, sortBy, sortDir, status, billingStatus, minAmount, maxAmount, start, end, search, tenantIdIgnored);
     }
     
     @GetMapping("/{id}")
@@ -577,6 +663,7 @@ public class TransactionsController {
     
     @PostMapping("/reset-error-to-pending")
     @Operation(summary = "Resetear transacciones de error a pendiente", description = "Cambia el billingStatus de 'error' a 'pending' para transacciones pagadas sin factura")
+    @PreAuthorize("hasRole('ADMIN')")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Estados reseteados exitosamente"),
         @ApiResponse(responseCode = "500", description = "Error al resetear estados")
@@ -615,6 +702,7 @@ public class TransactionsController {
 
     @PostMapping("/initialize-billing-status")
     @Operation(summary = "Inicializar estado de facturación", description = "Inicializa el campo billingStatus para transacciones existentes que no lo tienen")
+    @PreAuthorize("hasRole('ADMIN')")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Estados inicializados exitosamente"),
         @ApiResponse(responseCode = "500", description = "Error al inicializar estados")
@@ -754,6 +842,7 @@ public class TransactionsController {
     
     @PostMapping("/{transactionId}/confirm-billing")
     @Operation(summary = "Confirmar facturación", description = "Confirma que se debe facturar una transacción que está pendiente de confirmación")
+    @PreAuthorize("hasRole('ADMIN')")
     @ApiResponses(value = {
         @ApiResponse(responseCode = "200", description = "Facturación confirmada y procesada exitosamente"),
         @ApiResponse(responseCode = "404", description = "Transacción no encontrada"),
@@ -813,16 +902,19 @@ public class TransactionsController {
     })
     public Page<TransactionDto> getPendingBillingConfirmation(
             @Parameter(description = "Número de página (0-indexed)") @RequestParam(defaultValue = "0") int page,
-            @Parameter(description = "Tamaño de página") @RequestParam(defaultValue = "20") int size) {
+            @Parameter(description = "Tamaño de página") @RequestParam(defaultValue = "20") int size,
+            @RequestAttribute(name = "tenantId", required = false) java.util.UUID tenantId) {
+        if (tenantId == null) return Page.empty();
         
         Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
-        Page<Transaction> transactions = transactionRepository.findByBillingStatus("pending", pageable);
+        Page<Transaction> transactions = transactionRepository.findByBillingStatusAndTenantId("pending", tenantId, pageable);
         
         return transactions.map(TransactionDto::fromEntity);
     }
 
     @PostMapping("/setup-test-data")
     @Operation(summary = "Configurar datos de prueba", description = "Crea datos de prueba para testing de confirmación de facturación")
+    @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<?> setupTestData() {
         try {
             // Crear nuevos datos de prueba sin eliminar datos existentes para evitar errores

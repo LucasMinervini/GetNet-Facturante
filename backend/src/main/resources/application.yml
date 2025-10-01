@@ -22,6 +22,16 @@ spring:
 server:
   port: 1234
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
 app:
   cors:
     allowed-origins: http://localhost:5173

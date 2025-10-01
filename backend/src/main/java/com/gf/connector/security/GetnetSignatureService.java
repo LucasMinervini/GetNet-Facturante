@@ -24,11 +24,26 @@ public class GetnetSignatureService {
     @Value("${getnet.webhook.allow-unsigned:false}")
     private boolean allowUnsigned;
 
+    @SuppressWarnings("unused")
+    // Usado solo para evitar optimizaciones en comparaciones de tiempo-constante
+    private static volatile int TIME_EQUAL_DUMMY_SINK = 0;
+
     public String getSignatureHeaderName() {
         return signatureHeaderName;
     }
 
     public boolean verify(String rawBody, String headerValue) {
+        return verifyWithSecretInternal(this.secret, rawBody, headerValue);
+    }
+
+    /**
+     * Verifica usando un secreto provisto dinámicamente (por tenant)
+     */
+    public boolean verifyWithSecret(String secret, String rawBody, String headerValue) {
+        return verifyWithSecretInternal(secret, rawBody, headerValue);
+    }
+
+    private boolean verifyWithSecretInternal(String effectiveSecret, String rawBody, String headerValue) {
         boolean allow = allowUnsigned
                 || Boolean.parseBoolean(System.getProperty("getnet.webhook.allow-unsigned", "false"))
                 || Boolean.parseBoolean(System.getenv().getOrDefault("GETNET_WEBHOOK_ALLOW_UNSIGNED", "false"));
@@ -39,7 +54,7 @@ public class GetnetSignatureService {
         // Logging seguro: no exponer secretos ni payload completo
         log.debug("[SIG] Header present: {} | bodyLength: {}", headerValue != null, (rawBody != null ? rawBody.length() : -1));
 
-        if (secret == null || secret.isBlank()) {
+        if (effectiveSecret == null || effectiveSecret.isBlank()) {
             // Si no hay secreto configurado, por seguridad rechazamos
             log.warn("[SIG] Secret not configured, rejecting");
             return false;
@@ -50,8 +65,7 @@ public class GetnetSignatureService {
             return false;
         }
 
-        
-        byte[] hmac = hmacSha256(secret, rawBody);
+        byte[] hmac = hmacSha256(effectiveSecret, rawBody);
         String b64 = Base64.getEncoder().encodeToString(hmac);
         String hex = toHexLower(hmac);
         
@@ -97,12 +111,13 @@ public class GetnetSignatureService {
         byte[] ba = a.getBytes(StandardCharsets.UTF_8);
         byte[] bb = b.getBytes(StandardCharsets.UTF_8);
         if (ba.length != bb.length) {
-            // Comparación de longitud-constante aproximada
+            // Longitud distinta: no iguales (mantenemos tiempo cercano iterando usando un sink)
             int max = Math.max(ba.length, bb.length);
             byte[] ba2 = Arrays.copyOf(ba, max);
             byte[] bb2 = Arrays.copyOf(bb, max);
-            int result = 0;
-            for (int i = 0; i < max; i++) result |= (ba2[i] ^ bb2[i]);
+            int acc = 0;
+            for (int i = 0; i < max; i++) { acc |= (ba2[i] ^ bb2[i]); }
+            TIME_EQUAL_DUMMY_SINK ^= acc;
             return false;
         }
         int result = 0;

@@ -6,7 +6,9 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "invoices")
+@Table(name = "invoices", indexes = {
+    @Index(name = "idx_invoices_tenant", columnList = "tenant_id")
+})
 @Getter @Setter @Builder
 @NoArgsConstructor @AllArgsConstructor
 public class Invoice {
@@ -26,6 +28,9 @@ public class Invoice {
 
     @Column(columnDefinition = "TEXT")
     private String responseJson;
+
+    @Column(name = "tenant_id", nullable = false)
+    private java.util.UUID tenantId;
 
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

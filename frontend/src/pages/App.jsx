@@ -34,12 +34,12 @@ export default function App() {
     }
   }
 
-  if (!isAuthenticated) {
-    if (route === '/register') {
-      return <Registration onSuccess={() => navigate('/')} />
-    }
-    return <Login />
-  }
+      if (!isAuthenticated) {
+        if (route === '/register') {
+          return <Registration onSuccess={() => navigate('/billing-settings')} />
+        }
+        return <Login />
+      }
   const {
     // state
     health,

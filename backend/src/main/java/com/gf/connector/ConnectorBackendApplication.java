@@ -6,9 +6,11 @@ import io.github.cdimascio.dotenv.Dotenv;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.context.annotation.Bean;
 
 @SpringBootApplication
+@EnableScheduling
 public class ConnectorBackendApplication {
   public static void main(String[] args) {
     // Cargar variables de entorno desde .env
@@ -27,25 +29,26 @@ public class ConnectorBackendApplication {
   }
 
   @Bean
-  public CommandLineRunner initBillingSettings(BillingSettingsService billingSettingsService) {
+  public CommandLineRunner initBillingSettings(BillingSettingsService billingSettingsService, UserService userService) {
     return args -> {
-      // Crear configuración por defecto si no existe
-      billingSettingsService.createDefaultSettingsIfNotExists();
-    };
-  }
-
-  @Bean
-  public CommandLineRunner initDefaultUser(UserService userService) {
-    return args -> {
-      // Crear usuario admin por defecto si no existe
-      if (userService.findByUsername("admin").isEmpty()) {
+      // Multi-tenant: tomar el tenantId del admin inicial si existe; sino crear admin y usar su tenantId
+      var adminOpt = userService.findByUsername("admin");
+      java.util.UUID tenantId;
+      if (adminOpt.isPresent()) {
+        tenantId = adminOpt.get().getTenantId();
+      } else {
+        // Crear admin inicial y usar su tenantId
         try {
-          userService.createUser("admin", "admin", "admin@getnet-facturante.com", "Admin", "User");
+          var admin = userService.createUser("admin", "admin", "admin@getnet-facturante.com", "Admin", "User");
+          tenantId = admin.getTenantId();
           System.out.println("Usuario admin creado: admin/admin");
         } catch (Exception e) {
-          System.err.println("Error al crear usuario admin: " + e.getMessage());
+          // Si falla por duplicado de email/usuario, obtener nuevamente
+          tenantId = userService.findByUsername("admin").map(u -> u.getTenantId()).orElseGet(() -> java.util.UUID.randomUUID());
         }
       }
+      // Crear configuración por defecto si no existe para ese tenant
+      billingSettingsService.createDefaultSettingsIfNotExists(tenantId);
     };
   }
 }

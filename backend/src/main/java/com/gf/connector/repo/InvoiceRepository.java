@@ -11,5 +11,5 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     /**
      * Busca una factura por el ID de la transacción asociada
      */
-    Optional<Invoice> findByTransactionId(UUID transactionId);
+    Optional<Invoice> findByTransactionIdAndTenantId(UUID transactionId, java.util.UUID tenantId);
 }

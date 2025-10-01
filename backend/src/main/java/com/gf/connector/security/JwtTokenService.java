@@ -19,23 +19,31 @@ public class JwtTokenService {
     private final SecretKey refreshKey;
     private final long accessTtlSeconds;
     private final long refreshTtlSeconds;
+    private final String issuer;
+    private final String audience;
 
     public JwtTokenService(
             @Value("${jwt.access.secret}") String accessSecretBase64,
             @Value("${jwt.refresh.secret}") String refreshSecretBase64,
             @Value("${jwt.access.ttl-seconds:900}") long accessTtlSeconds,
-            @Value("${jwt.refresh.ttl-seconds:604800}") long refreshTtlSeconds
+            @Value("${jwt.refresh.ttl-seconds:604800}") long refreshTtlSeconds,
+            @Value("${jwt.issuer:gf-connector}") String issuer,
+            @Value("${jwt.audience:getnet-facturante}") String audience
     ) {
         this.accessKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(accessSecretBase64));
         this.refreshKey = Keys.hmacShaKeyFor(Decoders.BASE64.decode(refreshSecretBase64));
         this.accessTtlSeconds = accessTtlSeconds;
         this.refreshTtlSeconds = refreshTtlSeconds;
+        this.issuer = issuer;
+        this.audience = audience;
     }
 
     public String generateAccessToken(String subject, Map<String, Object> claims) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .setSubject(subject)
+                .setIssuer(issuer)
+                .setAudience(audience)
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(now.plusSeconds(accessTtlSeconds)))
                 .addClaims(claims)
@@ -47,6 +55,8 @@ public class JwtTokenService {
         Instant now = Instant.now();
         return Jwts.builder()
                 .setSubject(subject)
+                .setIssuer(issuer)
+                .setAudience(audience)
                 .setIssuedAt(Date.from(now))
                 .setExpiration(Date.from(now.plusSeconds(refreshTtlSeconds)))
                 .addClaims(claims)
@@ -55,12 +65,43 @@ public class JwtTokenService {
     }
 
     public String validateAccessTokenAndGetSubject(String token) {
-        return Jwts.parserBuilder()
+        var claims = Jwts.parserBuilder()
                 .setSigningKey(accessKey)
                 .build()
                 .parseClaimsJws(token)
-                .getBody()
-                .getSubject();
+                .getBody();
+        if (claims.getIssuer() == null || !claims.getIssuer().equals(issuer)) {
+            throw new IllegalArgumentException("Invalid token issuer");
+        }
+        if (claims.getAudience() == null || !claims.getAudience().equals(audience)) {
+            throw new IllegalArgumentException("Invalid token audience");
+        }
+        return claims.getSubject();
+    }
+
+    public String getTenantIdClaim(String token) {
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(accessKey)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody()
+                    .get("tenantId", String.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public Map<String, Object> getTokenClaims(String token) {
+        try {
+            return Jwts.parserBuilder()
+                    .setSigningKey(accessKey)
+                    .build()
+                    .parseClaimsJws(token)
+                    .getBody();
+        } catch (Exception e) {
+            return new java.util.HashMap<>();
+        }
     }
 }
 

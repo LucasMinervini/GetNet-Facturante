@@ -7,7 +7,9 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "billing_settings")
+@Table(name = "billing_settings", indexes = {
+    @Index(name = "idx_billing_settings_tenant", columnList = "tenant_id")
+})
 @Getter @Setter @Builder
 @NoArgsConstructor @AllArgsConstructor
 public class BillingSettings {
@@ -73,6 +75,13 @@ public class BillingSettings {
     
     @Column(name = "descripcion", length = 500)
     private String descripcion;
+    
+    // Secreto único por tenant para identificar webhooks del proveedor
+    @Column(name = "webhook_secret", length = 128)
+    private String webhookSecret;
+
+    @Column(name = "tenant_id", nullable = false)
+    private java.util.UUID tenantId;
     
     @Column(nullable = false, updatable = false)
     private OffsetDateTime createdAt;

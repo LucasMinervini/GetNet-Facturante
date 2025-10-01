@@ -272,8 +272,8 @@ public class GetnetToFacturanteTransformationService {
     private Cliente buildCliente(Transaction transaction, JsonNode payloadNode) {
         Cliente cliente = new Cliente();
         
-        // Obtener configuración activa
-        var settings = billingSettingsService.getActiveSettings().orElse(null);
+        // Obtener configuración activa del tenant de la transacción
+        var settings = billingSettingsService.getActiveSettings(transaction.getTenantId()).orElse(null);
         
         // Extraer datos del cliente del payload original
         String customerName = extractCustomerName(payloadNode);
@@ -336,8 +336,8 @@ public class GetnetToFacturanteTransformationService {
     private ComprobanteEncabezado buildEncabezado(Transaction transaction) {
         ComprobanteEncabezado encabezado = new ComprobanteEncabezado();
         
-        // Obtener configuración activa
-        var settings = billingSettingsService.getActiveSettings().orElse(null);
+        // Obtener configuración activa del tenant de la transacción
+        var settings = billingSettingsService.getActiveSettings(transaction.getTenantId()).orElse(null);
         
         // Usar configuración persistente o fallback a configuración por defecto
         String tipoComprobante = null;

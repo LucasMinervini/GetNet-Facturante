@@ -40,16 +40,19 @@ public class AuthController {
             // Actualizar último login
             userService.updateLastLogin(body.getUsername());
 
-            // Generar tokens
-            String access = jwtTokenService.generateAccessToken(user.getUsername(), Map.of("roles", user.getAuthorities()));
-            
-            // Crear refresh token en BD
+            // Generar tokens con tenantId
             Optional<User> userEntity = userService.findByUsername(body.getUsername());
             if (userEntity.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of("error", "Usuario no encontrado"));
             }
+            User domainUser = userEntity.get();
+            String access = jwtTokenService.generateAccessToken(user.getUsername(), Map.of(
+                "roles", user.getAuthorities(),
+                "tenantId", domainUser.getTenantId() != null ? domainUser.getTenantId().toString() : null
+            ));
             
-            RefreshToken refreshToken = refreshTokenService.createRefreshToken(userEntity.get(), null);
+            // Crear refresh token en BD
+            RefreshToken refreshToken = refreshTokenService.createRefreshToken(domainUser, null);
             
             return ResponseEntity.ok(Map.of(
                 "accessToken", access, 
@@ -75,7 +78,10 @@ public class AuthController {
             User user = newToken.getUser();
             
             // Generar nuevo access token
-            String access = jwtTokenService.generateAccessToken(user.getUsername(), Map.of("roles", "ROLE_USER"));
+            String access = jwtTokenService.generateAccessToken(user.getUsername(), Map.of(
+                "roles", userService.loadUserByUsername(user.getUsername()).getAuthorities(),
+                "tenantId", user.getTenantId() != null ? user.getTenantId().toString() : null
+            ));
             
             return ResponseEntity.ok(Map.of(
                 "accessToken", access,

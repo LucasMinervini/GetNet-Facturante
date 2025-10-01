@@ -59,6 +59,8 @@ public class UserService implements UserDetailsService {
             return roleRepository.save(r);
         });
 
+        java.util.UUID tenantId = java.util.UUID.randomUUID();
+
         User user = User.builder()
                 .username(username)
                 .password(passwordEncoder.encode(password))
@@ -67,6 +69,7 @@ public class UserService implements UserDetailsService {
                 .lastName(lastName)
                 .isActive(true)
                 .role(viewerRole)
+                .tenantId(tenantId)
                 .build();
         
         return userRepository.save(user);
