@@ -170,6 +170,9 @@ const apiPost = async (url) => {
 
 const HTTP = USE_MOCKS ? { get: apiGet, post: apiPost } : { get: apiGet, post: apiPost }
 
-export { API, USE_MOCKS, HTTP }
+// Exportar axiosInstance como 'api' para compatibilidad con componentes Dashboard y Reports
+const api = axiosInstance
+
+export { API, USE_MOCKS, HTTP, api }
 
 

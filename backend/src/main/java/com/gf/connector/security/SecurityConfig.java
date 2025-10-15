@@ -60,6 +60,19 @@ public class SecurityConfig {
                 // Credit Notes (ADMIN only)
                 .requestMatchers("/api/credit-notes/**").hasRole("ADMIN")
 
+                // Dashboard y Stats (lectura USER+)
+                .requestMatchers(HttpMethod.GET, "/api/dashboard/**").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/stats/**").hasAnyRole("USER", "ADMIN")
+
+                // Reports (lectura/exportación USER+, algunos endpoints ADMIN only)
+                .requestMatchers(HttpMethod.GET, "/api/reports/transactions/export").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/reports/invoices/export").hasAnyRole("USER", "ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/reports/credit-notes/export").hasRole("ADMIN")
+                .requestMatchers(HttpMethod.GET, "/api/reports/**").hasAnyRole("USER", "ADMIN")
+
+                // Reconciliation (manual run USER/ADMIN)
+                .requestMatchers(HttpMethod.POST, "/api/reconciliation/run").hasAnyRole("USER", "ADMIN")
+
                 // Cualquier otro endpoint autenticado por defecto
                 .anyRequest().authenticated()
             )

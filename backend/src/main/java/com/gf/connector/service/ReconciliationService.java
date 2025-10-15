@@ -6,6 +6,7 @@ import com.gf.connector.repo.TransactionRepository;
 import com.gf.connector.security.GetnetAuthenticationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,7 +30,10 @@ public class ReconciliationService {
     private final TransactionRepository transactionRepository;
     private final GetnetAuthenticationService getnetAuthService;
     private final InvoiceService invoiceService;
-    private final NotificationService notificationService;
+    
+    // NotificationService es opcional - solo existe si está configurado el email
+    @Autowired(required = false)
+    private NotificationService notificationService;
 
     /**
      * Ejecuta el proceso completo de reconciliación para un tenant específico
@@ -58,9 +62,13 @@ public class ReconciliationService {
             // 4. Procesar transacciones huérfanas
             ReconciliationResult result = processOrphanTransactions(orphanTransactions, tenantId);
             
-            // 5. Enviar notificación si hay errores
-            if (result.hasErrors()) {
-                notificationService.sendReconciliationErrorNotification(tenantId, result);
+            // 5. Notificaciones
+            if (notificationService != null) {
+                if (result.hasErrors()) {
+                    notificationService.sendReconciliationErrorNotification(tenantId, result);
+                } else if (result.getProcessedCount() > 0) {
+                    notificationService.sendReconciliationInfoNotification(tenantId, result.getProcessedCount());
+                }
             }
             
             log.info("Reconciliación completada: {} procesadas, {} errores", 
@@ -70,7 +78,9 @@ public class ReconciliationService {
             
         } catch (Exception e) {
             log.error("Error durante la reconciliación para tenant {}: {}", tenantId, e.getMessage(), e);
-            notificationService.sendReconciliationErrorNotification(tenantId, e);
+            if (notificationService != null) {
+                notificationService.sendReconciliationErrorNotification(tenantId, e);
+            }
             throw new RuntimeException("Error en reconciliación", e);
         }
     }
@@ -83,14 +93,37 @@ public class ReconciliationService {
             String startDateStr = startDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
             String endDateStr = endDate.format(DateTimeFormatter.ISO_LOCAL_DATE);
             
-            Object reportData = getnetAuthService.getMerchantReport(tenantId, startDateStr, endDateStr);
-            
-            // En una implementación real, aquí parsearíamos la respuesta de Getnet
-            // Por ahora simulamos datos
-            return List.of(
-                new GetnetTransaction("GETNET_001", "PAID", 100.0, "2024-01-15T10:30:00Z"),
-                new GetnetTransaction("GETNET_002", "PAID", 250.0, "2024-01-15T14:20:00Z")
-            );
+            Map<String, Object> response = getnetAuthService.getMerchantReport(tenantId, startDateStr, endDateStr);
+            if (response == null || response.isEmpty()) {
+                log.warn("Respuesta vaca de Merchant Reporting");
+                return List.of();
+            }
+
+            Object txs = response.get("transactions");
+            if (!(txs instanceof List<?> list)) {
+                log.warn("Formato inesperado en Merchant Reporting: sin 'transactions'");
+                return List.of();
+            }
+
+            return list.stream()
+                .filter(item -> item instanceof Map)
+                .map(item -> (Map<?, ?>) item)
+                .map(m -> {
+                    Object idObj = m.get("id");
+                    String id = idObj == null ? "" : String.valueOf(idObj);
+                    Object statusObj = m.get("status");
+                    String status = statusObj == null ? "" : String.valueOf(statusObj);
+                    Double amount = null;
+                    try {
+                        Object amt = m.get("amount");
+                        amount = amt == null ? null : Double.valueOf(String.valueOf(amt));
+                    } catch (Exception ignore) {}
+                    Object tsObj = m.get("timestamp");
+                    String timestamp = tsObj == null ? "" : String.valueOf(tsObj);
+                    return new GetnetTransaction(id, status, amount == null ? 0.0 : amount, timestamp);
+                })
+                .filter(tx -> "PAID".equalsIgnoreCase(tx.getStatus()))
+                .collect(Collectors.toList());
             
         } catch (Exception e) {
             log.error("Error al obtener reporte de Getnet: {}", e.getMessage(), e);
@@ -152,11 +185,27 @@ public class ReconciliationService {
                 
                 // Intentar generar factura
                 if (localTransaction.getBillingStatus() == null || !"billed".equals(localTransaction.getBillingStatus())) {
-                    // TODO: Implementar generación automática de factura
-                    // Por ahora solo marcamos la transacción como procesada y registramos que necesita facturación manual
-                    log.warn("Transacción huérfana detectada {}: requiere facturación manual", orphanTx.getId());
-                    result.incrementProcessed();
-                    // En una implementación futura, aquí llamarías a invoiceService para generar la factura automáticamente
+                    try {
+                        log.info("Generando factura automáticamente para huérfana {}", orphanTx.getId());
+                        invoiceService.createFacturaInFacturante(localTransaction);
+                        // Si llegó aquí, el servicio ya actualizó transaction (CAE, número, PDF)
+                        localTransaction.setBillingStatus("billed");
+                        localTransaction.setReconciled(true);
+                        transactionRepository.save(localTransaction);
+                        result.incrementProcessed();
+                    } catch (IllegalArgumentException e) {
+                        // Errores de validación: dejamos en pending y registramos error
+                        log.error("Validación fallida al facturar huérfana {}: {}", orphanTx.getId(), e.getMessage());
+                        localTransaction.setBillingStatus("error");
+                        transactionRepository.save(localTransaction);
+                        result.addError(orphanTx.getId(), e.getMessage());
+                    } catch (Exception e) {
+                        // Error técnico: registrar para posible reintento
+                        log.error("Error técnico al facturar huérfana {}: {}", orphanTx.getId(), e.getMessage(), e);
+                        localTransaction.setBillingStatus("error");
+                        transactionRepository.save(localTransaction);
+                        result.addError(orphanTx.getId(), e.getMessage());
+                    }
                 }
                 
             } catch (Exception e) {

@@ -5,13 +5,12 @@ import com.gf.connector.repo.BillingSettingsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.*;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -118,15 +117,15 @@ public class GetnetAuthenticationService {
             // Realizar llamada de autenticación
             log.info("Solicitando token de acceso a Getnet ({}): {}", environment, authUrl);
             
-            ResponseEntity<Map> response = restTemplate.exchange(
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                 authUrl,
                 HttpMethod.POST,
                 request,
-                Map.class
+                new ParameterizedTypeReference<Map<String, Object>>() {}
             );
             
-            if (response.getStatusCode() == HttpStatus.OK && response.getBody() != null) {
-                Map<String, Object> responseBody = response.getBody();
+            Map<String, Object> responseBody = response.getBody();
+            if (response.getStatusCode() == HttpStatus.OK && responseBody != null) {
                 String accessToken = (String) responseBody.get("access_token");
                 Integer expiresIn = (Integer) responseBody.getOrDefault("expires_in", 3600);
                 
@@ -167,11 +166,35 @@ public class GetnetAuthenticationService {
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(token);
             
-            // En una implementación real, aquí haríamos la llamada HTTP
-            log.info("Realizando llamada autenticada a Getnet: {} {}", method, endpoint);
-            
-            // Por ahora retornamos null para simular
-            return null;
+            String baseUrl = getApiUrl();
+            String url = baseUrl + endpoint;
+
+            HttpEntity<?> requestEntity;
+            if ("GET".equalsIgnoreCase(method) && body instanceof Map<?, ?> params && !params.isEmpty()) {
+                // Adjuntar query params
+                StringBuilder urlBuilder = new StringBuilder(url);
+                urlBuilder.append("?");
+                ((Map<?, ?>) params).forEach((k, v) -> {
+                    if (v != null) {
+                        urlBuilder.append(k).append("=").append(java.net.URLEncoder.encode(String.valueOf(v), java.nio.charset.StandardCharsets.UTF_8)).append("&");
+                    }
+                });
+                url = urlBuilder.substring(0, urlBuilder.length() - 1);
+                requestEntity = new HttpEntity<>(headers);
+            } else {
+                requestEntity = new HttpEntity<>(body, headers);
+            }
+
+            log.info("Realizando llamada autenticada a Getnet: {} {}", method, url);
+
+            HttpMethod httpMethod = HttpMethod.valueOf(method.toUpperCase());
+
+            ResponseEntity<T> response = restTemplate.exchange(url, httpMethod, requestEntity, responseType);
+            if (response.getStatusCode().is2xxSuccessful()) {
+                return response.getBody();
+            }
+
+            throw new RuntimeException("Llamada a Getnet no exitosa: " + response.getStatusCode());
             
         } catch (Exception e) {
             log.error("Error en llamada autenticada a Getnet: {}", e.getMessage(), e);
@@ -186,7 +209,7 @@ public class GetnetAuthenticationService {
      * @param endDate Fecha de fin
      * @return Lista de transacciones
      */
-    public Object getMerchantReport(UUID tenantId, String startDate, String endDate) {
+    public Map<String, Object> getMerchantReport(UUID tenantId, String startDate, String endDate) {
         try {
             String endpoint = "/v1/reports/transactions";
             Map<String, Object> params = Map.of(
@@ -195,11 +218,13 @@ public class GetnetAuthenticationService {
                 "status", "PAID"
             );
             
-            return makeAuthenticatedCall(endpoint, "GET", params, Object.class, tenantId);
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = makeAuthenticatedCall(endpoint, "GET", params, Map.class, tenantId);
+            return response;
             
         } catch (Exception e) {
             log.error("Error al obtener reporte de Getnet: {}", e.getMessage(), e);
-            return null;
+            return Map.of();
         }
     }
     

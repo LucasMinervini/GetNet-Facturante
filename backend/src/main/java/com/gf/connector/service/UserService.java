@@ -35,7 +35,10 @@ public class UserService implements UserDetailsService {
         }
         
         String roleName = user.getRole() != null ? user.getRole().getName() : "Viewer";
-        String springRole = "ROLE_" + roleName.toUpperCase();
+        // Evitar doble prefijo. Si ya viene como 'ROLE_ADMIN' usarlo tal cual; si viene 'ADMIN' o 'Viewer', prefijar correctamente
+        String springRole = roleName != null && roleName.startsWith("ROLE_")
+                ? roleName
+                : "ROLE_" + roleName.toUpperCase();
         return org.springframework.security.core.userdetails.User.builder()
                 .username(user.getUsername())
                 .password(user.getPassword())

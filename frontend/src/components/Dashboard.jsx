@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import StatsGrid from './StatsGrid';
-import TransactionsTable from './TransactionsTable';
 import './Dashboard.css';
 
 const Dashboard = () => {
@@ -23,6 +22,7 @@ const Dashboard = () => {
   });
 
   useEffect(() => {
+    console.log('Dashboard montado, cargando datos...');
     loadDashboardData();
   }, [dateRange]);
 
@@ -30,29 +30,37 @@ const Dashboard = () => {
     try {
       setLoading(true);
       setError(null);
+      
+      console.log('Cargando dashboard con fechas:', dateRange);
 
       // Cargar estadísticas
+      console.log('Llamando a /api/dashboard/stats...');
       const statsResponse = await api.get('/api/dashboard/stats', {
         params: {
           startDate: dateRange.start,
           endDate: dateRange.end
         }
       });
+      console.log('Stats recibidas:', statsResponse.data);
 
       // Cargar transacciones recientes
+      console.log('Llamando a /api/transactions...');
       const transactionsResponse = await api.get('/api/transactions', {
         params: {
           page: 0,
           size: 10,
-          sort: 'createdAt,desc'
+          sortBy: 'createdAt',
+          sortDir: 'desc'
         }
       });
+      console.log('Transacciones recibidas:', transactionsResponse.data);
 
       setStats(statsResponse.data);
       setRecentTransactions(transactionsResponse.data.content || []);
     } catch (err) {
       console.error('Error cargando dashboard:', err);
-      setError('Error al cargar los datos del dashboard');
+      console.error('Error completo:', err.response || err);
+      setError(`Error al cargar los datos del dashboard: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -64,21 +72,65 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <div className="dashboard-loading">
-        <div className="loading-spinner"></div>
-        <p>Cargando dashboard...</p>
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'white'
+      }}>
+        <div style={{
+          border: '4px solid #f3f3f3',
+          borderTop: '4px solid #3498db',
+          borderRadius: '50%',
+          width: '50px',
+          height: '50px',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <p style={{ marginTop: '20px', fontSize: '16px', color: '#333' }}>
+          Cargando dashboard...
+        </p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="dashboard-error">
-        <h2>Error en Dashboard</h2>
-        <p>{error}</p>
-        <button onClick={loadDashboardData} className="retry-button">
-          Reintentar
-        </button>
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'white',
+        padding: '20px'
+      }}>
+        <div style={{
+          background: '#fee',
+          border: '2px solid #fcc',
+          borderRadius: '8px',
+          padding: '30px',
+          maxWidth: '600px',
+          textAlign: 'center'
+        }}>
+          <h2 style={{ color: '#c33', marginBottom: '15px' }}>Error en Dashboard</h2>
+          <p style={{ color: '#666', marginBottom: '20px' }}>{error}</p>
+          <button 
+            onClick={loadDashboardData} 
+            style={{
+              background: '#3498db',
+              color: 'white',
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
@@ -109,16 +161,33 @@ const Dashboard = () => {
       </div>
 
       <div className="dashboard-content">
-        <StatsGrid stats={stats} />
+        <StatsGrid 
+          totalElements={stats.totalTransactions}
+          pageSubtotal={stats.totalAmount}
+          currency="ARS"
+          paidCount={stats.totalTransactions}
+          authorizedCount={stats.totalTransactions}
+          formatCurrency={(amount, currency) => `$${amount.toLocaleString('es-AR')} ${currency}`}
+        />
         
         <div className="dashboard-sections">
           <div className="section">
             <h2>Transacciones Recientes</h2>
-            <TransactionsTable 
-              transactions={recentTransactions}
-              showPagination={false}
-              compact={true}
-            />
+            <div className="transactions-list">
+              {recentTransactions.length > 0 ? (
+                recentTransactions.map(transaction => (
+                  <div key={transaction.id} className="transaction-item">
+                    <div className="transaction-info">
+                      <span className="transaction-id">{transaction.externalId}</span>
+                      <span className="transaction-status">{transaction.status}</span>
+                      <span className="transaction-amount">${transaction.amount}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p>No hay transacciones recientes</p>
+              )}
+            </div>
           </div>
           
           <div className="section">

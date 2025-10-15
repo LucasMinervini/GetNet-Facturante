@@ -4,6 +4,7 @@ import com.gf.connector.service.ReconciliationService.ReconciliationResult;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
@@ -16,10 +17,13 @@ import java.util.UUID;
 /**
  * Servicio para enviar notificaciones por email
  * Alertas para errores críticos del sistema
+ * 
+ * Nota: Este servicio solo se activa si spring.mail.host está configurado
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "spring.mail.host")
 public class NotificationService {
 
     private final JavaMailSender mailSender;
@@ -69,6 +73,32 @@ public class NotificationService {
             
         } catch (Exception e) {
             log.error("Error enviando notificación de reconciliación: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Envía notificación informativa cuando se detectan huérfanas sin errores
+     */
+    public void sendReconciliationInfoNotification(UUID tenantId, int processedCount) {
+        if (!emailEnabled) {
+            log.warn("Notificaciones por email deshabilitadas");
+            return;
+        }
+
+        try {
+            String subject = String.format("[%s] Reconciliación: %d huérfanas facturadas - Tenant %s",
+                    appName, processedCount, tenantId);
+
+            StringBuilder body = new StringBuilder();
+            body.append("Reconciliación ejecutada sin errores.\n\n");
+            body.append("Tenant ID: ").append(tenantId).append("\n");
+            body.append("Fecha: ").append(LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)).append("\n");
+            body.append("Transacciones huérfanas facturadas: ").append(processedCount).append("\n");
+
+            sendEmail(adminEmail, subject, body.toString());
+
+        } catch (Exception e) {
+            log.error("Error enviando notificación informativa de reconciliación: {}", e.getMessage(), e);
         }
     }
     

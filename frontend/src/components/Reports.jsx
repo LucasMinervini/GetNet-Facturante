@@ -11,6 +11,7 @@ const Reports = () => {
   });
   
   const [loading, setLoading] = useState(true);
+  const [runningReconciliation, setRunningReconciliation] = useState(false);
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -19,6 +20,7 @@ const Reports = () => {
   const [selectedReport, setSelectedReport] = useState('overview');
 
   useEffect(() => {
+    console.log('Reports montado, cargando datos...');
     loadReports();
   }, [dateRange, selectedReport]);
 
@@ -27,30 +29,110 @@ const Reports = () => {
       setLoading(true);
       setError(null);
 
-      const response = await api.get('/api/reports', {
+      // Cargar reporte consolidado
+      const consolidatedResponse = await api.get('/api/reports/consolidated', {
         params: {
           startDate: dateRange.start,
-          endDate: dateRange.end,
-          type: selectedReport
+          endDate: dateRange.end
         }
       });
 
-      setReports(response.data);
+      // Cargar transacciones por día
+      const dailyResponse = await api.get('/api/dashboard/transactions-by-day', {
+        params: {
+          startDate: dateRange.start,
+          endDate: dateRange.end
+        }
+      });
+
+      // Cargar facturas por estado
+      const invoicesStatusResponse = await api.get('/api/dashboard/invoices-by-status');
+
+      // Cargar reporte de reconciliación
+      const reconciliationResponse = await api.get('/api/reports/reconciliation', {
+        params: {
+          startDate: dateRange.start,
+          endDate: dateRange.end
+        }
+      });
+
+      // Estructurar datos para los componentes
+      const consolidated = consolidatedResponse.data;
+      setReports({
+        transactionVolume: {
+          total: consolidated.totalTransactions,
+          totalAmount: consolidated.totalAmount,
+          daily: dailyResponse.data
+        },
+        invoiceStats: {
+          total: consolidated.totalInvoices,
+          byStatus: invoicesStatusResponse.data,
+          successful: invoicesStatusResponse.data.sent || 0,
+          failed: invoicesStatusResponse.data.error || 0,
+          successRate: consolidated.totalInvoices > 0 
+            ? ((invoicesStatusResponse.data.sent || 0) / consolidated.totalInvoices * 100).toFixed(1)
+            : 0
+        },
+        errorStats: {
+          total: consolidated.webhookErrors,
+          webhookErrors: consolidated.webhookErrors,
+          errors: []
+        },
+        reconciliationStats: {
+          processed: reconciliationResponse.data.totalTransactions,
+          orphans: reconciliationResponse.data.unreconciledTransactions,
+          errors: reconciliationResponse.data.errorTransactions?.length || 0,
+          details: reconciliationResponse.data
+        },
+        consolidated: consolidated
+      });
+
     } catch (err) {
       console.error('Error cargando reportes:', err);
-      setError('Error al cargar los reportes');
+      console.error('Error completo:', err.response || err);
+      setError(`Error al cargar los reportes: ${err.message || 'Error desconocido'}`);
     } finally {
       setLoading(false);
     }
   };
 
+  const runReconciliation = async () => {
+    try {
+      setRunningReconciliation(true);
+      await api.post('/api/reconciliation/run', null, {
+        params: {
+          startDate: dateRange.start,
+          endDate: dateRange.end
+        }
+      });
+      await loadReports();
+      alert('Reconciliación ejecutada correctamente');
+    } catch (err) {
+      console.error('Error al ejecutar reconciliación:', err);
+      alert(`Error al ejecutar reconciliación: ${err?.response?.data || err.message}`);
+    } finally {
+      setRunningReconciliation(false);
+    }
+  };
+
   const exportReport = async (format = 'csv') => {
     try {
-      const response = await api.get('/api/reports/export', {
+      let endpoint = '/api/reports/transactions/export';
+      let filename = `transacciones_${dateRange.start}_${dateRange.end}`;
+      
+      // Seleccionar endpoint según el tipo de reporte
+      if (selectedReport === 'invoices') {
+        endpoint = '/api/reports/invoices/export';
+        filename = `facturas_${dateRange.start}_${dateRange.end}`;
+      } else if (selectedReport === 'reconciliation') {
+        endpoint = '/api/reports/transactions/export';
+        filename = `reconciliacion_${dateRange.start}_${dateRange.end}`;
+      }
+
+      const response = await api.get(endpoint, {
         params: {
           startDate: dateRange.start,
           endDate: dateRange.end,
-          type: selectedReport,
           format: format
         },
         responseType: 'blob'
@@ -59,7 +141,7 @@ const Reports = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `reporte_${selectedReport}_${dateRange.start}_${dateRange.end}.${format}`);
+      link.setAttribute('download', `${filename}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -72,21 +154,65 @@ const Reports = () => {
 
   if (loading) {
     return (
-      <div className="reports-loading">
-        <div className="loading-spinner"></div>
-        <p>Generando reportes...</p>
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'white'
+      }}>
+        <div style={{
+          border: '4px solid #f3f3f3',
+          borderTop: '4px solid #3498db',
+          borderRadius: '50%',
+          width: '50px',
+          height: '50px',
+          animation: 'spin 1s linear infinite'
+        }}></div>
+        <p style={{ marginTop: '20px', fontSize: '16px', color: '#333' }}>
+          Generando reportes...
+        </p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="reports-error">
-        <h2>Error en Reportes</h2>
-        <p>{error}</p>
-        <button onClick={loadReports} className="retry-button">
-          Reintentar
-        </button>
+      <div style={{ 
+        minHeight: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column',
+        alignItems: 'center', 
+        justifyContent: 'center',
+        background: 'white',
+        padding: '20px'
+      }}>
+        <div style={{
+          background: '#fee',
+          border: '2px solid #fcc',
+          borderRadius: '8px',
+          padding: '30px',
+          maxWidth: '600px',
+          textAlign: 'center'
+        }}>
+          <h2 style={{ color: '#c33', marginBottom: '15px' }}>Error en Reportes</h2>
+          <p style={{ color: '#666', marginBottom: '20px' }}>{error}</p>
+          <button 
+            onClick={loadReports}
+            style={{
+              background: '#3498db',
+              color: 'white',
+              border: 'none',
+              padding: '10px 20px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px'
+            }}
+          >
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }
@@ -138,6 +264,16 @@ const Reports = () => {
             <button onClick={loadReports} className="refresh-button">
               Actualizar
             </button>
+            {selectedReport === 'reconciliation' && (
+              <button
+                onClick={runReconciliation}
+                className="export-button"
+                disabled={runningReconciliation}
+                title="Forzar reconciliación para el rango de fechas seleccionado"
+              >
+                {runningReconciliation ? 'Reconciliando...' : 'Forzar Reconciliación'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -201,12 +337,42 @@ const OverviewReport = ({ data }) => (
 const TransactionsReport = ({ data }) => (
   <div className="report-section">
     <h2>Reporte de Transacciones</h2>
+    <div className="transactions-summary">
+      <div className="summary-card">
+        <h3>Total de Transacciones</h3>
+        <div className="big-value">{data?.total || 0}</div>
+      </div>
+      <div className="summary-card">
+        <h3>Monto Total</h3>
+        <div className="big-value">${(data?.totalAmount || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</div>
+      </div>
+    </div>
     <div className="transactions-chart">
       <h3>Volumen por Día</h3>
-      <div className="chart-placeholder">
-        <p>Gráfico de transacciones por día</p>
-        <p>Datos: {JSON.stringify(data, null, 2)}</p>
-      </div>
+      {data?.daily && data.daily.length > 0 ? (
+        <div className="chart-data">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Cantidad</th>
+                <th>Monto</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.daily.map((day, index) => (
+                <tr key={index}>
+                  <td>{day.date}</td>
+                  <td>{day.count}</td>
+                  <td>${(day.amount || 0).toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p>No hay datos de transacciones para el período seleccionado.</p>
+      )}
     </div>
   </div>
 );
@@ -274,7 +440,37 @@ const ReconciliationReport = ({ data }) => (
         <span className="label">Errores de Reconciliación:</span>
         <span className="value error">{data?.errors || 0}</span>
       </div>
+      <div className="stat-item">
+        <span className="label">Tasa de Reconciliación:</span>
+        <span className="value">{data?.details?.reconciliationRate?.toFixed(1) || 0}%</span>
+      </div>
     </div>
+    
+    {data?.details?.orphanTransactions && data.details.orphanTransactions.length > 0 && (
+      <div className="orphan-transactions">
+        <h3>Transacciones Huérfanas</h3>
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>ID Externo</th>
+              <th>Monto</th>
+              <th>Estado</th>
+              <th>Fecha</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.details.orphanTransactions.map((tx, index) => (
+              <tr key={index}>
+                <td>{tx.externalId}</td>
+                <td>${tx.amount.toLocaleString('es-AR', { minimumFractionDigits: 2 })}</td>
+                <td><span className={`badge ${tx.status.toLowerCase()}`}>{tx.status}</span></td>
+                <td>{tx.createdAt}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
   </div>
 );
 

@@ -80,7 +80,9 @@ export default function useTransactions() {
       }
       if (filters.search) params.append('search', filters.search)
 
-      const url = `${API}/api/transactions/list-native?${params}`
+      // Consumir el endpoint estándar del backend
+      // El controller expone GET /api/transactions con filtros por querystring
+      const url = `${API}/api/transactions?${params}`
       const response = await HTTP.get(url)
       const data = response.data
       setTransactions(data.content || [])

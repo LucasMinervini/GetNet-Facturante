@@ -6,6 +6,7 @@ import com.gf.connector.repo.TransactionRepository;
 import com.gf.connector.repo.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,7 +33,10 @@ public class BackupService {
     private final BillingSettingsRepository billingSettingsRepository;
     private final TransactionRepository transactionRepository;
     private final UserRepository userRepository;
-    private final NotificationService notificationService;
+    
+    // NotificationService es opcional - solo existe si está configurado el email
+    @Autowired(required = false)
+    private NotificationService notificationService;
     
     @Value("${backup.enabled:true}")
     private boolean backupEnabled;
@@ -80,8 +84,10 @@ public class BackupService {
             log.info("Backup completado exitosamente: {}", backupFile);
             
             // Enviar notificación de éxito
-            notificationService.sendBackupCompletedNotification(null, true, 
-                "Backup completado: " + backupFile.getFileName());
+            if (notificationService != null) {
+                notificationService.sendBackupCompletedNotification(null, true, 
+                    "Backup completado: " + backupFile.getFileName());
+            }
             
             return new BackupResult(true, "Backup exitoso: " + backupFile.getFileName());
             
@@ -89,8 +95,10 @@ public class BackupService {
             log.error("Error durante backup: {}", e.getMessage(), e);
             
             // Enviar notificación de error
-            notificationService.sendBackupCompletedNotification(null, false, 
-                "Error: " + e.getMessage());
+            if (notificationService != null) {
+                notificationService.sendBackupCompletedNotification(null, false, 
+                    "Error: " + e.getMessage());
+            }
             
             return new BackupResult(false, "Error: " + e.getMessage());
         }

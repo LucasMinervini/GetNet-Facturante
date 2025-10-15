@@ -26,7 +26,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus
   endpoint:
     health:
       probes:
@@ -70,6 +70,18 @@ getnet:
   api-secret: 
   seller-id: 
   environment: sandbox # sandbox, pre, production
+  
+  # URLs de OAuth para obtener tokens de acceso
+  oauth:
+    sandbox: https://api-sandbox.getnet.com.br/auth/oauth/v2/token
+    homologacao: https://api-homologacao.getnet.com.br/auth/oauth/v2/token
+    production: https://api.getnet.com.br/auth/oauth/v2/token
+  
+  # URLs de API principal de Getnet
+  api:
+    sandbox: https://api-sandbox.getnet.com.br
+    homologacao: https://api-homologacao.getnet.com.br
+    production: https://api.getnet.com.br
   
   # Credenciales de webhook (opcional)
   webhook:
