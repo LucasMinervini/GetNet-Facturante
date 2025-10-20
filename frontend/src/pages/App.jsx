@@ -22,12 +22,30 @@ import SimpleModal from '../components/SimpleModal'
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('accessToken'))
   const [route, setRoute] = useState(() => (typeof window !== 'undefined' ? window.location.pathname : '/'))
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem('theme')
+      return saved === 'light' || saved === 'dark' ? saved : 'dark'
+    } catch {
+      return 'dark'
+    }
+  })
 
   React.useEffect(() => {
     const onPop = () => setRoute(window.location.pathname)
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [])
+
+  // Aplicar tema al atributo data-theme del documento y persistir
+  React.useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', theme)
+    }
+    try { localStorage.setItem('theme', theme) } catch {}
+  }, [theme])
+
+  const toggleTheme = () => setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
 
   const navigate = (path) => {
     // Guard de producción: si no hay token y se intenta ir a rutas protegidas, enviar a login
@@ -50,10 +68,10 @@ export default function App() {
   }
 
   // Delegar a un sub-componente autenticado para mantener el orden de hooks
-  return <AuthenticatedApp route={route} navigate={navigate} />
+  return <AuthenticatedApp route={route} navigate={navigate} theme={theme} onToggleTheme={toggleTheme} />
 }
 
-function AuthenticatedApp({ route, navigate }) {
+function AuthenticatedApp({ route, navigate, theme, onToggleTheme }) {
   const {
     // state
     health,
@@ -122,7 +140,7 @@ function AuthenticatedApp({ route, navigate }) {
   if (route === '/dashboard') {
     return (
       <div key="route-dashboard">
-        <MainHeader onNavigate={navigate} currentRoute={route} />
+        <MainHeader onNavigate={navigate} currentRoute={route} theme={theme} onToggleTheme={onToggleTheme} />
         <Dashboard key="dashboard-view" />
       </div>
     )
@@ -132,7 +150,7 @@ function AuthenticatedApp({ route, navigate }) {
   if (route === '/reports') {
     return (
       <div key="route-reports">
-        <MainHeader onNavigate={navigate} currentRoute={route} />
+        <MainHeader onNavigate={navigate} currentRoute={route} theme={theme} onToggleTheme={onToggleTheme} />
         <Reports key="reports-view" />
       </div>
     )
@@ -207,8 +225,20 @@ function AuthenticatedApp({ route, navigate }) {
       <MainHeader 
         onNavigate={navigate} 
         currentRoute={route} 
+        theme={theme}
+        onToggleTheme={onToggleTheme} 
         onOpenSettings={handleOpenSettings} 
       />
+
+      {/* Controls for saved filters */}
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+        <button className="btn btn-secondary" aria-label="Guardar filtros" onClick={() => {
+          try { localStorage.setItem('tx_filters', JSON.stringify(filters)); setToastMsg('Filtros guardados'); } catch {}
+        }}>Guardar filtros</button>
+        <button className="btn btn-secondary" aria-label="Cargar filtros" onClick={() => {
+          try { const saved = JSON.parse(localStorage.getItem('tx_filters')||'{}'); setFilters(prev => ({...prev, ...saved})); setCurrentPage(0); setToastMsg('Filtros cargados'); } catch {}
+        }}>Cargar filtros</button>
+      </div>
 
       {/* Cards de estadísticas */}
       <div className="stats-grid">
@@ -388,7 +418,13 @@ function AuthenticatedApp({ route, navigate }) {
                 placeholder="Buscar por ID, external ID, email del cliente..."
                 value={filters.search || ''}
                 onChange={(e) => handleFilterChange('search', e.target.value)}
+                list="tx-suggestions"
               />
+              <datalist id="tx-suggestions">
+                {transactions.slice(0, 10).map(t => (
+                  <option key={t.id} value={t.externalId || ''} />
+                ))}
+              </datalist>
               <button 
                 className="search-btn enhanced-search-btn"
                 onClick={() => setCurrentPage(0)}
@@ -993,7 +1029,7 @@ function AuthenticatedApp({ route, navigate }) {
         </tbody>
       </table>
       </div>
-      <Toast message={toastMsg} />
+      <Toast message={toastMsg} type={/error/i.test(String(toastMsg||'')) ? 'error' : 'info'} onClose={() => setToastMsg('')} />
 
       <SimpleModal
         open={showNoPendingModal}

@@ -212,16 +212,47 @@ public class GetnetAuthenticationService {
     public Map<String, Object> getMerchantReport(UUID tenantId, String startDate, String endDate) {
         try {
             String endpoint = "/v1/reports/transactions";
-            Map<String, Object> params = Map.of(
-                "start_date", startDate,
-                "end_date", endDate,
-                "status", "PAID"
-            );
-            
-            @SuppressWarnings("unchecked")
-            Map<String, Object> response = makeAuthenticatedCall(endpoint, "GET", params, Map.class, tenantId);
-            return response;
-            
+            int page = 1;
+            int size = 100;
+            boolean hasMore = true;
+            java.util.List<Map<String, Object>> allTxs = new java.util.ArrayList<>();
+
+            while (hasMore) {
+                Map<String, Object> params = new java.util.HashMap<>();
+                params.put("start_date", startDate);
+                params.put("end_date", endDate);
+                params.put("status", "PAID");
+                params.put("page", page);
+                params.put("size", size);
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> response = makeAuthenticatedCall(endpoint, "GET", params, Map.class, tenantId);
+                Object txs = response.get("transactions");
+                if (txs instanceof java.util.List<?> list) {
+                    for (Object o : list) {
+                        if (o instanceof Map<?, ?> m) {
+                            allTxs.add((Map<String, Object>) m);
+                        }
+                    }
+                }
+
+                // Heurística de paginación: si vinieron menos de 'size', no hay más
+                int fetched = (txs instanceof java.util.List<?> list) ? list.size() : 0;
+                hasMore = fetched == size;
+                page++;
+
+                // Reintentos simples si respuesta vacía
+                if (fetched == 0 && page == 2) {
+                    log.warn("Merchant report vacío, reintentando una vez más...");
+                    page = 1;
+                    hasMore = true;
+                }
+            }
+
+            Map<String, Object> finalResponse = new java.util.HashMap<>();
+            finalResponse.put("transactions", allTxs);
+            return finalResponse;
+
         } catch (Exception e) {
             log.error("Error al obtener reporte de Getnet: {}", e.getMessage(), e);
             return Map.of();

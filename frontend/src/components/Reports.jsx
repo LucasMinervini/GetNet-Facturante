@@ -141,7 +141,8 @@ const Reports = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${filename}.csv`);
+      const ext = format === 'xlsx' ? 'xlsx' : format === 'json' ? 'json' : format === 'tsv' ? 'tsv' : 'csv';
+      link.setAttribute('download', `${filename}.${ext}`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -261,6 +262,12 @@ const Reports = () => {
             <button onClick={() => exportReport('xlsx')} className="export-button">
               Exportar Excel
             </button>
+            <button onClick={() => exportReport('json')} className="export-button">
+              Exportar JSON
+            </button>
+            <button onClick={() => exportReport('tsv')} className="export-button">
+              Exportar TSV
+            </button>
             <button onClick={loadReports} className="refresh-button">
               Actualizar
             </button>
@@ -274,6 +281,33 @@ const Reports = () => {
                 {runningReconciliation ? 'Reconciliando...' : 'Forzar Reconciliación'}
               </button>
             )}
+        {/* Stub: Notificaciones push en navegador */}
+        <button
+          className="export-button"
+          title="Solicitar permiso de notificaciones y mostrar una notificación local"
+          onClick={async () => {
+            try {
+              if (!('Notification' in window)) {
+                alert('Las notificaciones no están soportadas en este navegador.');
+                return;
+              }
+              const permission = await Notification.requestPermission();
+              if (permission === 'granted') {
+                const n = new Notification('GetNet Facturante', {
+                  body: 'Prueba de notificaciones activada correctamente.',
+                });
+                setTimeout(() => n.close(), 4000);
+              } else {
+                alert('Permiso de notificaciones denegado o no respondido.');
+              }
+            } catch (e) {
+              console.error(e);
+              alert('No se pudo mostrar la notificación.');
+            }
+          }}
+        >
+          Probar Notificación
+        </button>
           </div>
         </div>
       </div>

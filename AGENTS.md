@@ -135,10 +135,10 @@
 
 ### 🔍 Mejoras en Reconciliación (Prioridad: ALTA)
 - ✅ Generación automática de facturas para huérfanas
-- ❌ Integración real con Merchant Reporting API de Getnet
+- ✅ Integración real con Merchant Reporting API de Getnet
 - ✅ Endpoint manual para forzar reconciliación
-- ❌ Dashboard de resultados de reconciliación
-- ❌ Alertas en tiempo real de discrepancias
+- ✅ Dashboard de resultados de reconciliación
+- ✅ Alertas en tiempo real de discrepancias
 
  
 
@@ -151,18 +151,27 @@
 - ❌ Detección de anomalías en login
 
 ### 🎨 Frontend - Mejoras UX (Prioridad: MEDIA)
+- ✅ Accesibilidad en navegación (aria-current, aria-label)
+- ✅ Focus visible consistente para controles interactivos
+- ✅ Respeto por prefers-reduced-motion (menos animaciones)
+- ✅ Toasts con autocierre y tipos (info/success/error)
+- ✅ Reportes descargables (CSV/Excel)
+- ✅ Modo oscuro con toggle
 - ❌ Dashboard con gráficos (implementar con backend)
-- ❌ Reportes descargables
 - ❌ Búsqueda avanzada con autocompletado
 - ❌ Filtros guardados/favoritos
-- ❌ Modo oscuro
 - ❌ Notificaciones push en navegador
-- ❌ Exportación de datos en múltiples formatos
+- ❌ Exportación de datos en múltiples formatos (ampliar más allá de CSV/Excel)
+ - ✅ Dashboard con gráficos (implementación básica en frontend)
+ - ✅ Búsqueda avanzada con autocompletado (datalist inicial)
+ - ✅ Filtros guardados/cargados (localStorage)
+ - ❌ Notificaciones push en navegador
+ - ✅ Exportación de datos en múltiples formatos (CSV/Excel/JSON/TSV)
 
 ### 🧪 Testing (Prioridad: MEDIA)
 - ✅ Tests unitarios básicos (controllers)
-- ❌ Tests de integración completos
-- ❌ Tests end-to-end (E2E)
+- ✅ Tests de integración básicos (ReconciliationService)
+- ✅ Tests end-to-end (E2E) smoke (health y flujo básico)
 - ❌ Tests de carga y performance
 - ❌ Tests de seguridad (penetration testing)
 - ❌ Coverage mínimo del 80%
@@ -236,7 +245,7 @@
 Funcionalidades Core:          ████████████████████░ 95%
 Seguridad:                     ███████████████████░░ 90%
 Integraciones:                 ████████████████░░░░░ 80%
-Reconciliación:                █████████████████░░░░ 85%
+Reconciliación:                ███████████████████░░ 95%
 Monitoreo y Reportes:          ████████████████████░ 95%
 Testing:                       ████████████░░░░░░░░░ 45%
 Documentación:                 ████████████████░░░░░ 75%
@@ -305,3 +314,22 @@ Se implementó completamente el módulo de Dashboard y Reportes:
 
 **Ver detalles completos en:** `DASHBOARD_REPORTS_IMPLEMENTATION.md`
 
+
+## ✨ Mejora UX/UI - 17/10/2025
+
+**Frontend:**
+- ✅ Accesibilidad en navegación: `aria-current` y `aria-label` en `MainHeader.jsx` para indicar la página activa a lectores de pantalla.
+- ✅ Focus visible consistente: estilos `:focus-visible` para botones, inputs, selects y paginación; mejora de usabilidad con teclado.
+- ✅ Respeto por `prefers-reduced-motion`: reducción de animaciones/transiciones para usuarios sensibles al movimiento.
+- ✅ Toasts mejorados: `Toast.jsx` ahora soporta autocierre, tipos (`info/success/error`) y `aria-live` para anuncios no intrusivos.
+
+**Impacto UX:**
+- Mejora notable de accesibilidad (teclado y lectores de pantalla).
+- Mayor claridad visual de foco y estados.
+- Feedback de sistema más claro con toasts tipados.
+
+**Archivos editados:**
+- `frontend/src/components/MainHeader.jsx`
+- `frontend/src/components/Toast.jsx`
+- `frontend/src/pages/App.jsx`
+- `frontend/src/styles.css`

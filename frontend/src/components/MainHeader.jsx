@@ -1,6 +1,6 @@
 import React from 'react'
 
-export default function MainHeader({ onNavigate, currentRoute, onOpenSettings }) {
+export default function MainHeader({ onNavigate, currentRoute, onOpenSettings, theme, onToggleTheme }) {
   return (
     <div className="header">
       <div className="header-icons-layer" aria-hidden="true">
@@ -14,10 +14,37 @@ export default function MainHeader({ onNavigate, currentRoute, onOpenSettings })
         </div>
       </div>
       <div className="header-buttons">
+        {onToggleTheme && (
+          <button
+            onClick={onToggleTheme}
+            className="theme-toggle"
+            style={{ padding: '0.5rem 1rem', marginRight: '0.5rem' }}
+            title={theme === 'dark' ? 'Cambiar a claro' : 'Cambiar a oscuro'}
+          >
+            {theme === 'dark' ? (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                </svg>
+                Oscuro
+              </>
+            ) : (
+              <>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="5"/>
+                  <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                </svg>
+                Claro
+              </>
+            )}
+          </button>
+        )}
         <button
           onClick={() => onNavigate('/')}
           className={`btn ${currentRoute === '/' ? 'btn-primary' : 'btn-secondary'}`}
           style={{ padding: '0.5rem 1rem', marginRight: '0.5rem' }}
+          aria-current={currentRoute === '/' ? 'page' : undefined}
+          aria-label="Ir a Transacciones"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
@@ -29,6 +56,8 @@ export default function MainHeader({ onNavigate, currentRoute, onOpenSettings })
           onClick={() => onNavigate('/dashboard')}
           className={`btn ${currentRoute === '/dashboard' ? 'btn-primary' : 'btn-secondary'}`}
           style={{ padding: '0.5rem 1rem', marginRight: '0.5rem' }}
+          aria-current={currentRoute === '/dashboard' ? 'page' : undefined}
+          aria-label="Ir a Dashboard"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="3" width="7" height="7"/>
@@ -42,6 +71,8 @@ export default function MainHeader({ onNavigate, currentRoute, onOpenSettings })
           onClick={() => onNavigate('/reports')}
           className={`btn ${currentRoute === '/reports' ? 'btn-primary' : 'btn-secondary'}`}
           style={{ padding: '0.5rem 1rem', marginRight: '0.5rem' }}
+          aria-current={currentRoute === '/reports' ? 'page' : undefined}
+          aria-label="Ir a Reportes"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -57,6 +88,7 @@ export default function MainHeader({ onNavigate, currentRoute, onOpenSettings })
             onClick={onOpenSettings}
             className="btn btn-secondary"
             style={{ padding: '0.5rem 1rem' }}
+            aria-label="Abrir configuración"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="3"/>

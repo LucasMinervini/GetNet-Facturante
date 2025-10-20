@@ -791,6 +791,34 @@ body {
   position: relative;
 }
 
+/* Accesibilidad: foco visible consistente */
+:focus-visible {
+  outline: 3px solid rgba(102, 126, 234, 0.75);
+  outline-offset: 2px;
+}
+
+.btn:focus-visible,
+.theme-toggle:focus-visible,
+.form-input:focus-visible,
+.form-select:focus-visible,
+.enhanced-date-input:focus-visible,
+.pagination-btn:focus-visible,
+.download-btn:focus-visible {
+  outline: 3px solid rgba(102, 126, 234, 0.9);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.25);
+}
+
+/* Respeto por usuarios con reducción de movimiento */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* animación anterior eliminada para mayor estabilidad visual */
 
 body::before {
@@ -2537,6 +2565,19 @@ body::after {
   letter-spacing: 0.02em;
   position: relative;
   overflow: hidden;
+}
+
+/* Variantes de toast */
+.toast-success {
+  border-color: rgba(16, 185, 129, 0.35);
+}
+
+.toast-error {
+  border-color: rgba(239, 68, 68, 0.35);
+}
+
+.toast-info {
+  border-color: rgba(102, 126, 234, 0.35);
 }
 
 .toast::before {

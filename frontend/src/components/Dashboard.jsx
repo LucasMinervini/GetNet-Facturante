@@ -14,6 +14,7 @@ const Dashboard = () => {
   });
   
   const [recentTransactions, setRecentTransactions] = useState([]);
+  const [daily, setDaily] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dateRange, setDateRange] = useState({
@@ -55,8 +56,18 @@ const Dashboard = () => {
       });
       console.log('Transacciones recibidas:', transactionsResponse.data);
 
+      // Cargar transacciones por día (para gráficos)
+      console.log('Llamando a /api/dashboard/transactions-by-day...');
+      const dailyResponse = await api.get('/api/dashboard/transactions-by-day', {
+        params: {
+          startDate: dateRange.start,
+          endDate: dateRange.end
+        }
+      });
+
       setStats(statsResponse.data);
       setRecentTransactions(transactionsResponse.data.content || []);
+      setDaily(Array.isArray(dailyResponse.data) ? dailyResponse.data : []);
     } catch (err) {
       console.error('Error cargando dashboard:', err);
       console.error('Error completo:', err.response || err);
@@ -169,6 +180,40 @@ const Dashboard = () => {
           authorizedCount={stats.totalTransactions}
           formatCurrency={(amount, currency) => `$${amount.toLocaleString('es-AR')} ${currency}`}
         />
+        {/* Gráfico simple de barras (SVG) para volumen por día */}
+        {daily && daily.length > 0 && (
+          <div className="section" aria-label="Gráfico de volumen por día">
+            <h2>Volumen por Día</h2>
+            {(() => {
+              const maxCount = Math.max(...daily.map(d => d.count || 0), 1);
+              const barWidth = 24;
+              const gap = 8;
+              const height = 140;
+              const width = daily.length * (barWidth + gap) + gap;
+              return (
+                <svg width={width} height={height + 30} role="img" aria-label="Barras de transacciones por día">
+                  {daily.map((d, i) => {
+                    const h = Math.round(((d.count || 0) / maxCount) * height);
+                    const x = gap + i * (barWidth + gap);
+                    const y = height - h + 10;
+                    return (
+                      <g key={i}>
+                        <rect x={x} y={y} width={barWidth} height={h} rx="4" fill="#667eea"/>
+                        <title>{`${d.date}: ${d.count} transacciones`}</title>
+                        {/* Etiquetas pocas para no saturar */}
+                        {i % Math.ceil(daily.length / 6 || 1) === 0 && (
+                          <text x={x + barWidth / 2} y={height + 25} textAnchor="middle" fontSize="10" fill="#a0aec0">{d.date}</text>
+                        )}
+                      </g>
+                    )
+                  })}
+                  {/* Línea base */}
+                  <line x1={0} y1={height + 10} x2={width} y2={height + 10} stroke="#e5e7eb"/>
+                </svg>
+              )
+            })()}
+          </div>
+        )}
         
         <div className="dashboard-sections">
           <div className="section">
